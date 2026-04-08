@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}記帳{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-12 col-lg-8">
+    <h2 class="mb-3">記帳</h2>
+
+    <div id="alert-box"></div>
+
+    <form id="entry-form" autocomplete="off">
+      <div class="row g-2 mb-3">
+        <div class="col-6 col-sm-4">
+          <label class="form-label">取引日</label>
+          <input type="date" id="entry-date" class="form-control" required>
+        </div>
+        <div class="col-12 col-sm-8">
+          <label class="form-label">備考</label>
+          <input type="text" id="entry-note" class="form-control" placeholder="例: スーパー購入">
+        </div>
+      </div>
+
+      <datalist id="account-list"></datalist>
+
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle" id="lines-table">
+          <thead class="table-light">
+            <tr>
+              <th style="width:90px">借/貸</th>
+              <th>勘定科目</th>
+              <th style="width:130px">金額</th>
+              <th style="width:40px"></th>
+            </tr>
+          </thead>
+          <tbody id="lines-body"></tbody>
+          <tfoot>
+            <tr class="table-light">
+              <td colspan="2" class="text-end small text-muted">借方合計 / 貸方合計</td>
+              <td id="balance-cell" class="text-end small fw-bold"></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="d-flex gap-2 mb-4">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-add-row">＋ 行追加</button>
+        <button type="submit" class="btn btn-primary ms-auto">記帳する</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- 確認エリア -->
+  <div class="col-12 col-lg-4" id="confirm-area" style="display:none">
+    <h5 class="mb-2">記帳完了</h5>
+    <div id="confirm-table"></div>
+    <a href="/journal" class="btn btn-sm btn-outline-secondary mt-2">仕訳帳を確認</a>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/entry.js') }}"></script>
+{% endblock %}

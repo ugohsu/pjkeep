@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}初期設定{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-8 col-lg-6">
+    <h2 class="mb-4">初期設定</h2>
+
+    {% if configured %}
+    <div class="alert alert-success d-flex justify-content-between align-items-center">
+      <span>現在のDB: <code>{{ db_path }}</code></span>
+      <a href="/api/db/download" class="btn btn-sm btn-outline-success ms-3 text-nowrap">&#8595; DBダウンロード</a>
+    </div>
+    {% endif %}
+
+    <div id="alert-box"></div>
+
+    <!-- 既存 DB 一覧 -->
+    <div class="card mb-4">
+      <div class="card-header">データベースを選択</div>
+      <div class="card-body p-0">
+        <div id="db-list-loading" class="text-center text-muted small p-3">読み込み中...</div>
+        <ul id="db-list" class="list-group list-group-flush" style="display:none"></ul>
+        <div id="db-list-empty" class="text-muted small p-3" style="display:none">
+          <code>{{ db_path or 'data/' }}</code> フォルダに .db ファイルが見つかりません。下の「新規作成」から作成してください。
+        </div>
+      </div>
+    </div>
+
+    <!-- 新規作成 -->
+    <div class="card mb-4">
+      <div class="card-header">新規データベースを作成</div>
+      <div class="card-body">
+        <p class="text-muted small">はじめて使う場合はこちら。新しい帳簿ファイルを作成します。</p>
+        <div class="mb-3">
+          <label class="form-label">ファイル名</label>
+          <input type="text" id="create-path" class="form-control font-monospace"
+                 placeholder="例: pjkeep.db　（空欄で data/pjkeep.db に作成）">
+          <div class="form-text">ファイル名のみ（data/ フォルダ内に作成）またはフルパス</div>
+        </div>
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" id="insert-defaults" checked>
+          <label class="form-check-label" for="insert-defaults">
+            初期勘定科目を自動登録する（現金・普通預金・未払金・保育料収入・人件費 など）
+          </label>
+        </div>
+        <button class="btn btn-primary" id="btn-create">新規作成して開始</button>
+      </div>
+    </div>
+
+    <!-- 直接パス指定 -->
+    <div class="card mb-4">
+      <div class="card-header">パスを直接指定して開く</div>
+      <div class="card-body">
+        <p class="text-muted small">別の場所にある既存の .db ファイルを直接パスで指定します。</p>
+        <div class="mb-3">
+          <label class="form-label">ファイルパス</label>
+          <input type="text" id="open-path" class="form-control font-monospace"
+                 placeholder="例: /home/user/pjkeep.db" value="{{ db_path }}">
+        </div>
+        <button class="btn btn-outline-primary" id="btn-open">このDBを使用する</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function showAlert(msg, type) {
+  $('#alert-box').html(`<div class="alert alert-${type} alert-dismissible"><button type="button" class="btn-close" data-bs-dismiss="alert"></button>${msg}</div>`);
+}
+
+// DB 一覧の読み込み
+function loadDbList() {
+  $.getJSON('/api/init/list', function(files) {
+    $('#db-list-loading').hide();
+    if (files.length === 0) {
+      $('#db-list-empty').show();
+      return;
+    }
+    const ul = $('#db-list').empty().show();
+    files.forEach(function(f) {
+      const activeBadge = f.active ? ' <span class="badge bg-success ms-2">使用中</span>' : '';
+      const li = $(`
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span class="font-monospace small">${$('<div>').text(f.name).html()}${activeBadge}</span>
+          <button class="btn btn-sm btn-outline-primary ms-2 btn-select-db" data-path="${$('<div>').text(f.path).html()}">
+            ${f.active ? '選択中' : '選択'}
+          </button>
+        </li>
+      `);
+      ul.append(li);
+    });
+  }).fail(function() {
+    $('#db-list-loading').text('一覧の取得に失敗しました');
+  });
+}
+
+$(document).on('click', '.btn-select-db', function() {
+  const path = $(this).data('path');
+  $(this).prop('disabled', true).text('切替中...');
+  $.ajax({
+    url: '/api/init/open',
+    method: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({ db_path: path }),
+    success: function(res) {
+      showAlert(`DBを切り替えました: <code>${res.db_path}</code>`, 'success');
+      setTimeout(() => { window.location.href = '/entry'; }, 1000);
+    },
+    error: function(xhr) {
+      showAlert(xhr.responseJSON?.error || '失敗しました', 'danger');
+      loadDbList();
+    }
+  });
+});
+
+$('#btn-create').on('click', function() {
+  const path = $('#create-path').val().trim();
+  const insertDefaults = $('#insert-defaults').prop('checked');
+  $(this).prop('disabled', true).text('作成中...');
+  $.ajax({
+    url: '/api/init/create',
+    method: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({ db_path: path, insert_defaults: insertDefaults }),
+    success: function(res) {
+      showAlert(`データベースを作成しました: <code>${res.db_path}</code>`, 'success');
+      setTimeout(() => { window.location.href = '/entry'; }, 1200);
+    },
+    error: function(xhr) {
+      showAlert(xhr.responseJSON?.error || '作成に失敗しました', 'danger');
+      $('#btn-create').prop('disabled', false).text('新規作成して開始');
+    }
+  });
+});
+
+$('#btn-open').on('click', function() {
+  const path = $('#open-path').val().trim();
+  if (!path) { showAlert('パスを入力してください', 'warning'); return; }
+  $(this).prop('disabled', true).text('確認中...');
+  $.ajax({
+    url: '/api/init/open',
+    method: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({ db_path: path }),
+    success: function(res) {
+      showAlert(`DBを設定しました: <code>${res.db_path}</code>`, 'success');
+      setTimeout(() => { window.location.href = '/entry'; }, 1200);
+    },
+    error: function(xhr) {
+      showAlert(xhr.responseJSON?.error || '失敗しました', 'danger');
+      $('#btn-open').prop('disabled', false).text('このDBを使用する');
+    }
+  });
+});
+
+loadDbList();
+</script>
+{% endblock %}

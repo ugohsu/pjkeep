@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}バッチインポート{% endblock %}
+{% block content %}
+<h2 class="mb-3">バッチインポート</h2>
+
+<div id="alert-box"></div>
+
+<!-- Step 1: JSON入力 -->
+<div id="step-input" class="card mb-4">
+  <div class="card-header fw-bold">① JSON を貼り付け / ファイル選択</div>
+  <div class="card-body">
+    <div class="mb-2 d-flex align-items-center gap-2">
+      <input type="file" id="json-file" class="form-control form-control-sm" accept=".json" style="max-width:320px">
+      <a href="#" id="btn-sample" class="small text-muted">サンプルを表示</a>
+    </div>
+    <textarea id="json-input" class="form-control font-monospace" rows="12"
+              placeholder='{"transactions": [...]}'
+              spellcheck="false"></textarea>
+    <div class="mt-2 d-flex gap-2">
+      <button class="btn btn-primary" id="btn-preview">プレビュー</button>
+      <button class="btn btn-outline-secondary btn-sm" id="btn-clear">クリア</button>
+    </div>
+  </div>
+</div>
+
+<!-- Step 2: プレビュー -->
+<div id="step-preview" style="display:none">
+  <div class="d-flex flex-wrap align-items-center mb-2 gap-2">
+    <h5 class="mb-0">② プレビュー・確認</h5>
+    <span id="preview-summary" class="text-muted small"></span>
+    <div class="ms-auto d-flex gap-2">
+      <button class="btn btn-outline-secondary btn-sm" id="btn-check-all">全選択</button>
+      <button class="btn btn-outline-secondary btn-sm" id="btn-uncheck-all">全解除</button>
+      <button class="btn btn-success" id="btn-commit">インポート実行</button>
+    </div>
+  </div>
+  <div id="preview-list"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/import.js') }}"></script>
+{% endblock %}

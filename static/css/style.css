@@ -1,0 +1,68 @@
+/* pjkeep - スタイル */
+
+body {
+  font-size: 0.95rem;
+  background-color: #f8f9fa;
+}
+
+.navbar-brand {
+  font-weight: bold;
+  letter-spacing: 0.05em;
+}
+
+/* テーブル */
+.table th, .table td {
+  vertical-align: middle;
+}
+
+/* 小ボタン */
+.btn-xs {
+  padding: 0.1rem 0.4rem;
+  font-size: 0.78rem;
+  border-radius: 0.2rem;
+}
+
+/* 自動補完された金額 */
+input.auto-filled {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+/* 金額テキスト */
+.text-end {
+  font-variant-numeric: tabular-nums;
+}
+
+/* カード */
+.card {
+  border: 1px solid #dee2e6;
+  box-shadow: 0 1px 3px rgba(0,0,0,.05);
+}
+.card-header {
+  background-color: #f0f2f5;
+}
+
+/* 仕訳帳リスト */
+.list-group-item {
+  border-radius: 0 !important;
+}
+
+/* モバイル調整 */
+@media (max-width: 576px) {
+  .container-fluid {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+  h2 {
+    font-size: 1.3rem;
+  }
+  .table-sm td, .table-sm th {
+    font-size: 0.85rem;
+  }
+}
+
+/* フォームコントロール */
+.form-control:focus, .form-select:focus {
+  border-color: #86b7fe;
+  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+}

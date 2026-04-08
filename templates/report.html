@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}財務諸表{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+  <h2 class="mb-0">財務諸表</h2>
+  <select id="ym-select" class="form-select form-select-sm" style="width:auto"></select>
+  <div class="ms-auto btn-group">
+    <button class="btn btn-sm btn-outline-secondary" id="btn-export">TSV エクスポート（指定月）</button>
+    <button class="btn btn-sm btn-outline-secondary dropdown-toggle dropdown-toggle-split"
+            data-bs-toggle="dropdown" aria-expanded="false"></button>
+    <ul class="dropdown-menu dropdown-menu-end">
+      <li><a class="dropdown-item" id="btn-export-month-rpt" href="#">指定月のみ</a></li>
+      <li><a class="dropdown-item" id="btn-export-period-rpt" href="#">任意の期間</a></li>
+    </ul>
+  </div>
+</div>
+
+<div id="alert-box"></div>
+
+<div class="row g-3">
+  <!-- PL -->
+  <div class="col-12 col-md-6">
+    <div class="card h-100">
+      <div class="card-header fw-bold">損益計算書（PL）<span id="pl-ym" class="text-muted small ms-2"></span></div>
+      <div class="card-body p-0">
+        <div id="pl-content"><div class="p-3 text-muted">読み込み中...</div></div>
+      </div>
+    </div>
+  </div>
+  <!-- BS -->
+  <div class="col-12 col-md-6">
+    <div class="card h-100">
+      <div class="card-header fw-bold">貸借対照表（BS）<span id="bs-ym" class="text-muted small ms-2">（累計残高）</span></div>
+      <div class="card-body p-0">
+        <div id="bs-content"><div class="p-3 text-muted">読み込み中...</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 期間指定エクスポートモーダル -->
+<div class="modal fade" id="reportPeriodModal" tabindex="-1" aria-labelledby="reportPeriodModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="reportPeriodModalLabel">期間を指定してエクスポート</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-3">
+          損益計算書：開始日〜終了日の期間<br>
+          貸借対照表：終了日時点の残高
+        </p>
+        <div class="mb-3">
+          <label class="form-label" for="report-period-from">開始日</label>
+          <input type="date" class="form-control" id="report-period-from">
+        </div>
+        <div class="mb-1">
+          <label class="form-label" for="report-period-to">終了日</label>
+          <input type="date" class="form-control" id="report-period-to">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-primary" id="btn-report-period-ok">エクスポート</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/report.js') }}"></script>
+{% endblock %}

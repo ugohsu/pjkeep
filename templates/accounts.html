@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}勘定科目{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-3">
+  <h2 class="mb-0">勘定科目</h2>
+  <div class="ms-auto d-flex gap-2">
+    <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#modal-batch-accounts">
+      バッチ追加
+    </button>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modal-account">
+      ＋ 科目を追加
+    </button>
+  </div>
+</div>
+
+<div id="alert-box"></div>
+<div id="accounts-list"></div>
+
+<!-- 追加・編集モーダル -->
+<div class="modal fade" id="modal-account" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-title">勘定科目の追加</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="edit-id">
+        <div class="mb-3">
+          <label class="form-label">科目名 <span class="text-danger">*</span></label>
+          <input type="text" id="edit-name" class="form-control" placeholder="例: 食費">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">コード <span class="text-danger">*</span></label>
+          <input type="text" id="edit-code" class="form-control" placeholder="例: food">
+          <div class="form-text">英数字・アンダーバーのみ。一意である必要があります。</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">区分 <span class="text-danger">*</span></label>
+          <select id="edit-element" class="form-select">
+            <option value="assets">資産</option>
+            <option value="liabilities">負債</option>
+            <option value="equity">純資産</option>
+            <option value="revenues">収益</option>
+            <option value="expenses">費用</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">表示順</label>
+          <input type="number" id="edit-sort" class="form-control" value="0">
+        </div>
+        <div id="modal-alert"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-primary" id="btn-save">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- バッチ追加モーダル -->
+<div class="modal fade" id="modal-batch-accounts" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">勘定科目のバッチ追加</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-2">
+          以下の JSON 配列形式で複数の勘定科目を一括追加できます。<br>
+          <code>element</code> は <code>assets</code> / <code>liabilities</code> / <code>equity</code> / <code>revenues</code> / <code>expenses</code> のいずれか。
+        </p>
+        <textarea id="batch-accounts-input" class="form-control font-monospace mb-2" rows="10" spellcheck="false"
+          placeholder='[
+  {"name": "交通費", "code": "travel", "element": "expenses", "sort_order": 30},
+  {"name": "雑収入", "code": "misc_income", "element": "revenues", "sort_order": 30}
+]'></textarea>
+        <div id="batch-accounts-result"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+        <button type="button" class="btn btn-primary" id="btn-batch-accounts-save">追加する</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/accounts.js') }}"></script>
+{% endblock %}

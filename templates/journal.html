@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}仕訳帳{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+  <h2 class="mb-0">仕訳帳</h2>
+  <select id="ym-select" class="form-select form-select-sm" style="width:auto"></select>
+  <div class="ms-auto btn-group">
+    <button class="btn btn-sm btn-outline-secondary" id="btn-export">TSV エクスポート（指定月）</button>
+    <button class="btn btn-sm btn-outline-secondary dropdown-toggle dropdown-toggle-split"
+            data-bs-toggle="dropdown" aria-expanded="false"></button>
+    <ul class="dropdown-menu dropdown-menu-end">
+      <li><a class="dropdown-item" id="btn-export-month" href="#">指定月のみ</a></li>
+      <li><a class="dropdown-item" id="btn-export-all" href="#">全仕訳</a></li>
+      <li><a class="dropdown-item" id="btn-export-period" href="#">任意の期間</a></li>
+    </ul>
+  </div>
+</div>
+
+<div id="alert-box"></div>
+<div id="journal-list"></div>
+
+<!-- 期間指定エクスポートモーダル -->
+<div class="modal fade" id="journalPeriodModal" tabindex="-1" aria-labelledby="journalPeriodModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="journalPeriodModalLabel">期間を指定してエクスポート</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label" for="journal-period-from">開始日</label>
+          <input type="date" class="form-control" id="journal-period-from">
+        </div>
+        <div class="mb-1">
+          <label class="form-label" for="journal-period-to">終了日</label>
+          <input type="date" class="form-control" id="journal-period-to">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-primary" id="btn-journal-period-ok">エクスポート</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/journal.js') }}"></script>
+{% endblock %}
