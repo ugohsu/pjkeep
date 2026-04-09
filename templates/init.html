@@ -21,7 +21,7 @@
         <div id="db-list-loading" class="text-center text-muted small p-3">読み込み中...</div>
         <ul id="db-list" class="list-group list-group-flush" style="display:none"></ul>
         <div id="db-list-empty" class="text-muted small p-3" style="display:none">
-          <code>{{ db_path or 'data/' }}</code> フォルダに .db ファイルが見つかりません。下の「新規作成」から作成してください。
+          <code>data/</code> フォルダに .db ファイルが見つかりません。下の「新規作成」から作成してください。
         </div>
       </div>
     </div>
@@ -34,8 +34,13 @@
         <div class="mb-3">
           <label class="form-label">ファイル名</label>
           <input type="text" id="create-path" class="form-control font-monospace"
-                 placeholder="例: pjkeep.db　（空欄で data/pjkeep.db に作成）">
-          <div class="form-text">ファイル名のみ（data/ フォルダ内に作成）またはフルパス</div>
+                 placeholder="例: pjkeep.db　（空欄で pjkeep.db に作成）">
+          <div class="form-text">ファイル名のみ指定してください（data/ フォルダ内に作成されます）</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">説明文 <span class="text-muted">(任意)</span></label>
+          <input type="text" id="create-description" class="form-control"
+                 placeholder="例: 〇〇保育園 2025年度">
         </div>
         <div class="form-check mb-3">
           <input class="form-check-input" type="checkbox" id="insert-defaults" checked>
@@ -47,22 +52,48 @@
       </div>
     </div>
 
-    <!-- 直接パス指定 -->
+    <!-- ファイルアップロード -->
     <div class="card mb-4">
-      <div class="card-header">パスを直接指定して開く</div>
+      <div class="card-header">既存の .db ファイルをアップロードして開く</div>
       <div class="card-body">
-        <p class="text-muted small">別の場所にある既存の .db ファイルを直接パスで指定します。</p>
+        <p class="text-muted small">別の環境で作成した .db ファイルをアップロードして使用します。</p>
         <div class="mb-3">
-          <label class="form-label">ファイルパス</label>
-          <input type="text" id="open-path" class="form-control font-monospace"
-                 placeholder="例: /home/user/pjkeep.db" value="{{ db_path }}">
+          <label class="form-label">ファイルを選択</label>
+          <input type="file" id="upload-file" class="form-control" accept=".db">
         </div>
-        <button class="btn btn-outline-primary" id="btn-open">このDBを使用する</button>
+        <div class="mb-3">
+          <label class="form-label">説明文 <span class="text-muted">(任意)</span></label>
+          <input type="text" id="upload-description" class="form-control"
+                 placeholder="例: 〇〇保育園 2025年度">
+        </div>
+        <button class="btn btn-outline-primary" id="btn-upload">アップロードして開始</button>
       </div>
     </div>
 
   </div>
 </div>
+
+<!-- 説明文編集モーダル -->
+<div class="modal fade" id="descModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title">説明文を編集</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="desc-filename">
+        <label class="form-label small"><code id="desc-filename-label"></code></label>
+        <input type="text" id="desc-text" class="form-control" placeholder="説明文（任意）">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-sm btn-primary" id="btn-save-desc">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 {% block scripts %}
 <script>
@@ -80,13 +111,28 @@ function loadDbList() {
     }
     const ul = $('#db-list').empty().show();
     files.forEach(function(f) {
-      const activeBadge = f.active ? ' <span class="badge bg-success ms-2">使用中</span>' : '';
+      const activeBadge = f.active ? ' <span class="badge bg-success ms-1">使用中</span>' : '';
+      const descHtml = f.description
+        ? `<div class="text-muted small mt-1">${$('<div>').text(f.description).html()}</div>`
+        : '';
       const li = $(`
-        <li class="list-group-item d-flex justify-content-between align-items-center">
-          <span class="font-monospace small">${$('<div>').text(f.name).html()}${activeBadge}</span>
-          <button class="btn btn-sm btn-outline-primary ms-2 btn-select-db" data-path="${$('<div>').text(f.path).html()}">
-            ${f.active ? '選択中' : '選択'}
-          </button>
+        <li class="list-group-item">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <span class="font-monospace small">${$('<div>').text(f.name).html()}${activeBadge}</span>
+              ${descHtml}
+            </div>
+            <div class="d-flex gap-1 ms-2 flex-shrink-0">
+              <button class="btn btn-sm btn-outline-secondary btn-edit-desc"
+                      data-name="${$('<div>').text(f.name).html()}"
+                      data-desc="${$('<div>').text(f.description).html()}"
+                      title="説明文を編集">&#9998;</button>
+              <button class="btn btn-sm btn-outline-primary btn-select-db"
+                      data-path="${$('<div>').text(f.path).html()}">
+                ${f.active ? '選択中' : '選択'}
+              </button>
+            </div>
+          </div>
         </li>
       `);
       ul.append(li);
@@ -115,15 +161,47 @@ $(document).on('click', '.btn-select-db', function() {
   });
 });
 
+$(document).on('click', '.btn-edit-desc', function() {
+  const name = $(this).data('name');
+  const desc = $(this).data('desc');
+  $('#desc-filename').val(name);
+  $('#desc-filename-label').text(name);
+  $('#desc-text').val(desc);
+  new bootstrap.Modal('#descModal').show();
+});
+
+$('#btn-save-desc').on('click', function() {
+  const filename = $('#desc-filename').val();
+  const description = $('#desc-text').val().trim();
+  $(this).prop('disabled', true);
+  $.ajax({
+    url: '/api/init/description',
+    method: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({ filename, description }),
+    success: function() {
+      bootstrap.Modal.getInstance('#descModal').hide();
+      loadDbList();
+    },
+    error: function(xhr) {
+      showAlert(xhr.responseJSON?.error || '保存に失敗しました', 'danger');
+    },
+    complete: function() {
+      $('#btn-save-desc').prop('disabled', false);
+    }
+  });
+});
+
 $('#btn-create').on('click', function() {
   const path = $('#create-path').val().trim();
+  const description = $('#create-description').val().trim();
   const insertDefaults = $('#insert-defaults').prop('checked');
   $(this).prop('disabled', true).text('作成中...');
   $.ajax({
     url: '/api/init/create',
     method: 'POST',
     contentType: 'application/json',
-    data: JSON.stringify({ db_path: path, insert_defaults: insertDefaults }),
+    data: JSON.stringify({ db_path: path, insert_defaults: insertDefaults, description }),
     success: function(res) {
       showAlert(`データベースを作成しました: <code>${res.db_path}</code>`, 'success');
       setTimeout(() => { window.location.href = '/entry'; }, 1200);
@@ -135,22 +213,27 @@ $('#btn-create').on('click', function() {
   });
 });
 
-$('#btn-open').on('click', function() {
-  const path = $('#open-path').val().trim();
-  if (!path) { showAlert('パスを入力してください', 'warning'); return; }
-  $(this).prop('disabled', true).text('確認中...');
+$('#btn-upload').on('click', function() {
+  const file = $('#upload-file')[0].files[0];
+  if (!file) { showAlert('ファイルを選択してください', 'warning'); return; }
+  const description = $('#upload-description').val().trim();
+  const fd = new FormData();
+  fd.append('db_file', file);
+  if (description) fd.append('description', description);
+  $(this).prop('disabled', true).text('アップロード中...');
   $.ajax({
-    url: '/api/init/open',
+    url: '/api/init/upload',
     method: 'POST',
-    contentType: 'application/json',
-    data: JSON.stringify({ db_path: path }),
+    data: fd,
+    processData: false,
+    contentType: false,
     success: function(res) {
-      showAlert(`DBを設定しました: <code>${res.db_path}</code>`, 'success');
+      showAlert(`アップロードしました: <code>${res.db_path}</code>`, 'success');
       setTimeout(() => { window.location.href = '/entry'; }, 1200);
     },
     error: function(xhr) {
-      showAlert(xhr.responseJSON?.error || '失敗しました', 'danger');
-      $('#btn-open').prop('disabled', false).text('このDBを使用する');
+      showAlert(xhr.responseJSON?.error || 'アップロードに失敗しました', 'danger');
+      $('#btn-upload').prop('disabled', false).text('アップロードして開始');
     }
   });
 });

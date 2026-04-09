@@ -41,7 +41,9 @@ def load_config():
             return json.load(f)
     return {}
 
-def save_config(config):
+def save_config(updates):
+    config = load_config()
+    config.update(updates)
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
         json.dump(config, f, ensure_ascii=False, indent=2)
 
@@ -127,18 +129,30 @@ def accounts():
 
 @app.post('/api/init/create')
 def api_init_create():
+    from werkzeug.utils import secure_filename
     data = request.json or {}
-    db_path = data.get('db_path', '').strip()
-    if not db_path:
-        db_path = os.path.join(DATA_DIR, 'pjkeep.db')
-    if not os.path.isabs(db_path):
-        db_path = os.path.join(DATA_DIR, db_path)
+    filename = data.get('db_path', '').strip()
+    if not filename:
+        filename = 'pjkeep.db'
+    # フルパスやディレクトリ指定を禁止
+    if os.path.isabs(filename) or '/' in filename or '\\' in filename:
+        return jsonify({'error': 'ファイル名のみ指定してください（パスは指定できません）'}), 400
+    filename = secure_filename(filename)
+    if not filename.endswith('.db'):
+        filename += '.db'
+    db_path = os.path.join(DATA_DIR, filename)
     if os.path.exists(db_path):
-        return jsonify({'error': f'ファイルが既に存在します: {db_path}'}), 400
+        return jsonify({'error': f'ファイルが既に存在します: {filename}'}), 400
     try:
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        os.makedirs(DATA_DIR, exist_ok=True)
         init_db(db_path, insert_defaults=data.get('insert_defaults', True))
         save_config({'db_path': db_path})
+        description = data.get('description', '').strip()
+        if description:
+            config = load_config()
+            descriptions = config.get('descriptions', {})
+            descriptions[filename] = description
+            save_config({'descriptions': descriptions})
         return jsonify({'ok': True, 'db_path': db_path})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -149,11 +163,14 @@ def api_init_list():
     files = []
     if os.path.isdir(DATA_DIR):
         current = get_db_path()
+        descriptions = load_config().get('descriptions', {})
         for path in sorted(glob_mod.glob(os.path.join(DATA_DIR, '*.db'))):
+            name = os.path.basename(path)
             files.append({
                 'path': path,
-                'name': os.path.basename(path),
+                'name': name,
                 'active': os.path.abspath(path) == (os.path.abspath(current) if current else None),
+                'description': descriptions.get(name, ''),
             })
     return jsonify(files)
 
@@ -169,6 +186,42 @@ def api_init_open():
         return jsonify({'error': f'ファイルが見つかりません: {db_path}'}), 404
     save_config({'db_path': db_path})
     return jsonify({'ok': True, 'db_path': db_path})
+
+@app.post('/api/init/upload')
+def api_init_upload():
+    from werkzeug.utils import secure_filename
+    f = request.files.get('db_file')
+    if not f or not f.filename:
+        return jsonify({'error': 'ファイルが指定されていません'}), 400
+    filename = secure_filename(f.filename)
+    if not filename.lower().endswith('.db'):
+        return jsonify({'error': '.db ファイルのみアップロードできます'}), 400
+    os.makedirs(DATA_DIR, exist_ok=True)
+    dest = os.path.join(DATA_DIR, filename)
+    if os.path.exists(dest):
+        return jsonify({'error': f'同名のファイルが既に存在します: {filename}'}), 400
+    f.save(dest)
+    save_config({'db_path': dest})
+    description = request.form.get('description', '').strip()
+    if description:
+        config = load_config()
+        descriptions = config.get('descriptions', {})
+        descriptions[filename] = description
+        save_config({'descriptions': descriptions})
+    return jsonify({'ok': True, 'db_path': dest})
+
+@app.post('/api/init/description')
+def api_init_description():
+    data = request.json or {}
+    filename = data.get('filename', '').strip()
+    description = data.get('description', '').strip()
+    if not filename or os.path.isabs(filename) or '/' in filename or '\\' in filename:
+        return jsonify({'error': '不正なファイル名です'}), 400
+    config = load_config()
+    descriptions = config.get('descriptions', {})
+    descriptions[filename] = description
+    save_config({'descriptions': descriptions})
+    return jsonify({'ok': True})
 
 # ---------- db download ----------
 
