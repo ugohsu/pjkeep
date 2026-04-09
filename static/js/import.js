@@ -93,9 +93,25 @@ function renderPreview(res) {
   txns.forEach(function (txn, i) {
     const conf = txn._confidence;
     const lowConf = typeof conf === 'number' && conf < 0.8;
-    const cardClass = !txn.valid ? 'border-danger' : (lowConf ? 'border-warning' : '');
-    const headerClass = !txn.valid ? 'bg-danger-subtle' : (lowConf ? 'bg-warning-subtle' : 'bg-light');
-    const checked = txn.valid ? 'checked' : '';
+    const dup = txn._duplicate;
+    const dupProb = dup ? dup.probability : 0;
+    const highDup = dupProb >= 0.8;
+    const midDup  = dupProb >= 0.5 && dupProb < 0.8;
+
+    let cardClass, headerClass;
+    if (!txn.valid) {
+      cardClass = 'border-danger'; headerClass = 'bg-danger-subtle';
+    } else if (highDup) {
+      cardClass = 'border-warning'; headerClass = 'bg-warning-subtle';
+    } else if (midDup) {
+      cardClass = 'border-warning border-opacity-50'; headerClass = 'bg-warning-subtle bg-opacity-50';
+    } else if (lowConf) {
+      cardClass = 'border-warning'; headerClass = 'bg-warning-subtle';
+    } else {
+      cardClass = ''; headerClass = 'bg-light';
+    }
+
+    const checked  = (txn.valid && !highDup) ? 'checked' : '';
     const disabled = txn.valid ? '' : 'disabled';
 
     // 借方・貸方合計
@@ -113,6 +129,8 @@ function renderPreview(res) {
     html += `<span>${escHtml(txn.date)}</span>`;
     if (txn.note) html += `<span class="text-muted">${escHtml(txn.note)}</span>`;
     if (lowConf) html += `<span class="badge bg-warning text-dark ms-1">確信度 ${(conf * 100).toFixed(0)}%</span>`;
+    if (highDup) html += `<span class="badge bg-warning text-dark ms-1">⚠ 重複の可能性 ${(dupProb * 100).toFixed(0)}%</span>`;
+    else if (midDup) html += `<span class="badge bg-warning text-dark ms-1" style="opacity:.7">重複の可能性 ${(dupProb * 100).toFixed(0)}%</span>`;
     if (!txn.valid) html += `<span class="badge bg-danger ms-1">エラー</span>`;
     html += `</div>`;  // card-header
 
@@ -145,6 +163,22 @@ function renderPreview(res) {
     html += `${debitTotal.toLocaleString()} / ${creditTotal.toLocaleString()}`;
     html += `</td></tr></tfoot>`;
     html += `</table>`;
+
+    // 重複警告パネル
+    if (dup && dupProb >= 0.5) {
+      const m = dup.matched;
+      const diffLabel = dup.date_diff_days === 0 ? '同日' : `日付差 ${dup.date_diff_days} 日`;
+      html += `<div class="alert alert-warning py-2 px-3 mb-2 small">`;
+      html += `<strong>⚠ 類似仕訳が既存データに存在します（${diffLabel}）</strong><br>`;
+      html += `${escHtml(m.date)}`;
+      if (m.note) html += `&nbsp;${escHtml(m.note)}`;
+      html += `<br>`;
+      const dupLines = (m.lines || []).map(l =>
+        `${l.debit_credit === 'debit' ? '借方' : '貸方'} ${escHtml(l.account_name)} ${l.amount.toLocaleString()}`
+      ).join('　／　');
+      html += `<span class="text-muted">${dupLines}</span>`;
+      html += `</div>`;
+    }
 
     // エラー一覧
     const errs = errorsByIdx[i] || [];

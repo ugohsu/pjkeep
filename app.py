@@ -419,6 +419,97 @@ def api_journal_delete(transaction_id):
     db.commit()
     return jsonify({'ok': True})
 
+# ---------- duplicate detection ----------
+
+def detect_duplicate(db, date_val, import_note, lines, n_max_days=7):
+    """
+    既存仕訳の中から重複候補を探し、最も確率の高いものを返す。
+    必須条件：借方合計・勘定科目構成が完全一致。
+    スコア：日付の近さ（± n_max_days 日）で算出し、摘要が両方非空で部分一致する場合は加点。
+    """
+    from datetime import date as dt, timedelta
+    try:
+        target_date = dt.fromisoformat(date_val)
+    except ValueError:
+        return None
+
+    target_amount = sum(l['amount'] for l in lines if l['debit_credit'] == 'debit')
+    target_structure = frozenset(
+        (l['account_code'], l['debit_credit']) for l in lines
+    )
+
+    date_from = (target_date - timedelta(days=n_max_days)).isoformat()
+    date_to   = (target_date + timedelta(days=n_max_days)).isoformat()
+
+    rows = db.execute(
+        '''
+        SELECT j.transaction_id, j.entry_date, j.debit_credit, j.amount,
+               a.code AS account_code, a.name AS account_name,
+               j.note
+        FROM journal j
+        JOIN accounts a ON a.id = j.account_id
+        WHERE j.entry_date BETWEEN ? AND ?
+        ''',
+        (date_from, date_to)
+    ).fetchall()
+
+    by_txn = {}
+    for r in rows:
+        tid = r['transaction_id']
+        if tid not in by_txn:
+            by_txn[tid] = {'date': r['entry_date'], 'note': r['note'], 'lines': []}
+        by_txn[tid]['lines'].append({
+            'account_code': r['account_code'],
+            'account_name': r['account_name'],
+            'debit_credit': r['debit_credit'],
+            'amount':       r['amount'],
+        })
+
+    best = None
+    best_prob = 0.0
+
+    for tid, txn in by_txn.items():
+        cand_amount = sum(l['amount'] for l in txn['lines'] if l['debit_credit'] == 'debit')
+        if cand_amount != target_amount:
+            continue
+
+        cand_structure = frozenset(
+            (l['account_code'], l['debit_credit']) for l in txn['lines']
+        )
+        if cand_structure != target_structure:
+            continue
+
+        try:
+            cand_date = dt.fromisoformat(txn['date'])
+        except ValueError:
+            continue
+        date_diff = abs((target_date - cand_date).days)
+        date_score = max(0.0, 1.0 - date_diff / n_max_days)
+
+        # 摘要ボーナス：両方非空かつ片方がもう片方を含む場合
+        bonus = 1.0
+        i_note = (import_note or '').strip()
+        t_note = (txn['note'] or '').strip()
+        if i_note and t_note and (i_note in t_note or t_note in i_note):
+            bonus = 1.1
+
+        probability = min(1.0, date_score * bonus)
+
+        if probability > best_prob:
+            best_prob = probability
+            best = {
+                'probability':    round(probability, 2),
+                'date_diff_days': date_diff,
+                'matched': {
+                    'transaction_id': tid,
+                    'date':  txn['date'],
+                    'note':  txn['note'] or '',
+                    'lines': txn['lines'],
+                },
+            }
+
+    return best if best_prob > 0.0 else None
+
 # ---------- import API ----------
 
 @app.route('/import')
@@ -492,6 +583,10 @@ def api_import_preview():
         if not txn_errors and debit_total != credit_total:
             txn_errors.append(f'借方合計 {debit_total:,} と貸方合計 {credit_total:,} が一致しません')
 
+        duplicate = None
+        if len(txn_errors) == 0:
+            duplicate = detect_duplicate(db, date_val, txn.get('note', ''), resolved_lines)
+
         result.append({
             'index': i,
             'date': txn.get('date', ''),
@@ -500,6 +595,7 @@ def api_import_preview():
             '_confidence': float(txn.get('_confidence', 1.0)),
             'lines': resolved_lines,
             'valid': len(txn_errors) == 0,
+            '_duplicate': duplicate,
         })
         for msg in txn_errors:
             errors.append({'index': i, 'message': msg})
