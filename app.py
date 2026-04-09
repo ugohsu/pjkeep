@@ -51,7 +51,7 @@ def get_db_path():
     filename = request.cookies.get('active_db')
     if filename:
         return os.path.join(DATA_DIR, filename)
-    return load_config().get('db_path')
+    return None
 
 # ---------- DB ----------
 
@@ -64,6 +64,15 @@ def get_db():
         g.db.row_factory = sqlite3.Row
         g.db.execute('PRAGMA foreign_keys = ON')
     return g.db
+
+@app.context_processor
+def inject_active_db():
+    filename = request.cookies.get('active_db')
+    if not filename:
+        return {'active_db_name': None}
+    descriptions = load_config().get('descriptions', {})
+    label = descriptions.get(filename) or filename
+    return {'active_db_name': label}
 
 @app.teardown_appcontext
 def close_db(e=None):

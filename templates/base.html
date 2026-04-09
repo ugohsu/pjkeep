@@ -11,6 +11,9 @@
 <nav class="navbar navbar-expand-sm navbar-dark bg-dark">
   <div class="container-fluid">
     <a class="navbar-brand" href="/">pjkeep</a>
+    {% if active_db_name %}
+    <span class="navbar-text text-warning small ms-2 me-2">{{ active_db_name }}</span>
+    {% endif %}
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navmenu">
       <span class="navbar-toggler-icon"></span>
     </button>
