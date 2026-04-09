@@ -48,6 +48,9 @@ def save_config(updates):
         json.dump(config, f, ensure_ascii=False, indent=2)
 
 def get_db_path():
+    filename = request.cookies.get('active_db')
+    if filename:
+        return os.path.join(DATA_DIR, filename)
     return load_config().get('db_path')
 
 # ---------- DB ----------
@@ -146,14 +149,15 @@ def api_init_create():
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
         init_db(db_path, insert_defaults=data.get('insert_defaults', True))
-        save_config({'db_path': db_path})
         description = data.get('description', '').strip()
         if description:
             config = load_config()
             descriptions = config.get('descriptions', {})
             descriptions[filename] = description
             save_config({'descriptions': descriptions})
-        return jsonify({'ok': True, 'db_path': db_path})
+        resp = jsonify({'ok': True, 'db_path': db_path})
+        resp.set_cookie('active_db', filename)
+        return resp
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -184,8 +188,9 @@ def api_init_open():
         db_path = os.path.join(DATA_DIR, db_path)
     if not os.path.exists(db_path):
         return jsonify({'error': f'ファイルが見つかりません: {db_path}'}), 404
-    save_config({'db_path': db_path})
-    return jsonify({'ok': True, 'db_path': db_path})
+    resp = jsonify({'ok': True, 'db_path': db_path})
+    resp.set_cookie('active_db', os.path.basename(db_path))
+    return resp
 
 @app.post('/api/init/upload')
 def api_init_upload():
@@ -201,14 +206,15 @@ def api_init_upload():
     if os.path.exists(dest):
         return jsonify({'error': f'同名のファイルが既に存在します: {filename}'}), 400
     f.save(dest)
-    save_config({'db_path': dest})
     description = request.form.get('description', '').strip()
     if description:
         config = load_config()
         descriptions = config.get('descriptions', {})
         descriptions[filename] = description
         save_config({'descriptions': descriptions})
-    return jsonify({'ok': True, 'db_path': dest})
+    resp = jsonify({'ok': True, 'db_path': dest})
+    resp.set_cookie('active_db', filename)
+    return resp
 
 @app.post('/api/init/description')
 def api_init_description():
