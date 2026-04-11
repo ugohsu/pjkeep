@@ -19,14 +19,29 @@
     </button>
     <div class="collapse navbar-collapse" id="navmenu">
       <ul class="navbar-nav me-auto">
-        <li class="nav-item"><a class="nav-link {% if request.endpoint=='entry' %}active{% endif %}" href="/entry">記帳</a></li>
-        <li class="nav-item"><a class="nav-link {% if request.endpoint=='journal' %}active{% endif %}" href="/journal">仕訳帳</a></li>
-        <li class="nav-item"><a class="nav-link {% if request.endpoint=='report' %}active{% endif %}" href="/report">財務諸表</a></li>
-        <li class="nav-item"><a class="nav-link {% if request.endpoint=='accounts' %}active{% endif %}" href="/accounts">勘定科目</a></li>
-        <li class="nav-item"><a class="nav-link {% if request.endpoint=='import_page' %}active{% endif %}" href="/import">バッチインポート</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.endpoint=='journal.entry' %}active{% endif %}" href="/entry">記帳</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.endpoint=='journal.journal' %}active{% endif %}" href="/journal">仕訳帳</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.endpoint=='report.report' %}active{% endif %}" href="/report">財務諸表</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.endpoint=='accounts.accounts' %}active{% endif %}" href="/accounts">勘定科目</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.endpoint=='journal.import_page' %}active{% endif %}" href="/import">バッチインポート</a></li>
       </ul>
       <ul class="navbar-nav">
-        <li class="nav-item"><a class="nav-link {% if request.endpoint=='init' %}active{% endif %}" href="/init">設定</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.endpoint=='init_bp.init' %}active{% endif %}" href="/init">設定</a></li>
+        {% if current_user.is_authenticated %}
+          {% if current_user.is_admin %}
+          <li class="nav-item"><a class="nav-link {% if request.endpoint=='admin.admin_users' %}active{% endif %}" href="/admin/users">ユーザー管理</a></li>
+          {% endif %}
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+              {{ current_user.username }}
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="/profile">プロフィール</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item" id="nav-logout" href="#">ログアウト</a></li>
+            </ul>
+          </li>
+        {% endif %}
       </ul>
     </div>
   </div>
@@ -38,6 +53,17 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script>
+$('#nav-logout').on('click', function(e) {
+  e.preventDefault();
+  $.ajax({
+    url: '/api/auth/logout',
+    method: 'POST',
+    success: function() { window.location.href = '/login'; },
+    error: function() { window.location.href = '/login'; }
+  });
+});
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}プロフィール{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-6 col-lg-5">
+    <h2 class="mb-4">アカウント設定</h2>
+    <div id="alert-box"></div>
+
+    <!-- パスワード変更 -->
+    <div class="card mb-4">
+      <div class="card-header">パスワード変更</div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label" for="current-password">現在のパスワード</label>
+          <input type="password" id="current-password" class="form-control">
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="new-password">新しいパスワード <span class="text-muted small">（6文字以上）</span></label>
+          <input type="password" id="new-password" class="form-control">
+        </div>
+        <button class="btn btn-primary" id="btn-change-pw">変更する</button>
+      </div>
+    </div>
+
+    <!-- アカウント削除 -->
+    <div class="card border-danger">
+      <div class="card-header text-danger">アカウントの削除</div>
+      <div class="card-body">
+        <p class="text-muted small">アカウントを削除すると、あなたのすべてのプロジェクト（帳簿ファイル）も同時に削除されます。この操作は取り消せません。</p>
+        <button class="btn btn-outline-danger" id="btn-delete-account">アカウントを削除する</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function showAlert(msg, type) {
+  $('#alert-box').html(`<div class="alert alert-${type} alert-dismissible"><button type="button" class="btn-close" data-bs-dismiss="alert"></button>${msg}</div>`);
+}
+
+$('#btn-change-pw').on('click', function() {
+  const current_password = $('#current-password').val();
+  const new_password = $('#new-password').val();
+  if (!current_password || !new_password) {
+    showAlert('両方のパスワードを入力してください', 'warning');
+    return;
+  }
+  $(this).prop('disabled', true);
+  $.ajax({
+    url: '/api/profile/password',
+    method: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({ current_password, new_password }),
+    success: function() {
+      showAlert('パスワードを変更しました', 'success');
+      $('#current-password, #new-password').val('');
+    },
+    error: function(xhr) {
+      showAlert(xhr.responseJSON?.error || '変更に失敗しました', 'danger');
+    },
+    complete: function() { $('#btn-change-pw').prop('disabled', false); }
+  });
+});
+
+$('#btn-delete-account').on('click', function() {
+  if (!confirm('本当にアカウントを削除しますか？\nすべてのプロジェクトも削除されます。この操作は取り消せません。')) return;
+  $(this).prop('disabled', true);
+  $.ajax({
+    url: '/api/profile',
+    method: 'DELETE',
+    success: function() { window.location.href = '/login'; },
+    error: function(xhr) {
+      showAlert(xhr.responseJSON?.error || '削除に失敗しました', 'danger');
+      $('#btn-delete-account').prop('disabled', false);
+    }
+  });
+});
+</script>
+{% endblock %}

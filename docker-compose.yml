@@ -1,6 +1,7 @@
 services:
   app:
     build: .
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
     restart: unless-stopped
     volumes:
       - ./data:/app/data

@@ -137,6 +137,12 @@ $('#btn-export-period-rpt').on('click', function(e) {
   new bootstrap.Modal('#reportPeriodModal').show();
 });
 
+// エクスポート：全月一覧（横展開）
+$('#btn-export-monthly-rpt').on('click', function(e) {
+  e.preventDefault();
+  window.location.href = '/api/export/report/monthly';
+});
+
 // モーダル内のエクスポートボタン
 $('#btn-report-period-ok').on('click', function() {
   const from = $('#report-period-from').val();

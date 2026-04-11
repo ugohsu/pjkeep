@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}ユーザー管理{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-3">
+  <h2 class="mb-0">ユーザー管理</h2>
+</div>
+<div id="alert-box"></div>
+<div class="card">
+  <div class="card-body p-0">
+    <div id="users-loading" class="text-center text-muted p-3">読み込み中...</div>
+    <table class="table table-sm table-hover mb-0" id="users-table" style="display:none">
+      <thead class="table-light">
+        <tr>
+          <th>ユーザー名</th>
+          <th>ロール</th>
+          <th>プロジェクト数</th>
+          <th>登録日時</th>
+          <th style="width:80px"></th>
+        </tr>
+      </thead>
+      <tbody id="users-tbody"></tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function showAlert(msg, type) {
+  $('#alert-box').html(`<div class="alert alert-${type} alert-dismissible"><button type="button" class="btn-close" data-bs-dismiss="alert"></button>${msg}</div>`);
+}
+
+function loadUsers() {
+  $.getJSON('/api/admin/users', function(users) {
+    $('#users-loading').hide();
+    const tbody = $('#users-tbody').empty();
+    users.forEach(function(u) {
+      const roleBadge = u.role === 'admin'
+        ? '<span class="badge bg-danger">admin</span>'
+        : '<span class="badge bg-secondary">user</span>';
+      const isSelf = u.username === '{{ current_user.username }}';
+      const delBtn = isSelf
+        ? '<button class="btn btn-xs btn-outline-secondary" disabled>削除</button>'
+        : `<button class="btn btn-xs btn-outline-danger btn-del" data-id="${u.id}" data-name="${$('<div>').text(u.username).html()}">削除</button>`;
+      tbody.append(`<tr>
+        <td>${$('<div>').text(u.username).html()}${isSelf ? ' <span class="text-muted small">(あなた)</span>' : ''}</td>
+        <td>${roleBadge}</td>
+        <td>${u.project_count}</td>
+        <td class="small text-muted">${u.created_at}</td>
+        <td>${delBtn}</td>
+      </tr>`);
+    });
+    $('#users-table').show();
+  }).fail(function() {
+    $('#users-loading').text('読み込みに失敗しました');
+  });
+}
+
+$(document).on('click', '.btn-del', function() {
+  const id = $(this).data('id');
+  const name = $(this).data('name');
+  if (!confirm(`「${name}」を削除しますか？\nそのユーザーのプロジェクトもすべて削除されます。`)) return;
+  $.ajax({
+    url: `/api/admin/users/${id}`,
+    method: 'DELETE',
+    success: function() {
+      showAlert('削除しました', 'success');
+      loadUsers();
+    },
+    error: function(xhr) {
+      showAlert(xhr.responseJSON?.error || '削除に失敗しました', 'danger');
+    }
+  });
+});
+
+loadUsers();
+</script>
+{% endblock %}
