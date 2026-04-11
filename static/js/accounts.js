@@ -142,6 +142,22 @@ $('#edit-name').on('input', function() {
   $('#edit-code').val(code);
 });
 
+// ---- COA ダウンロード ----
+$('#btn-download-coa').on('click', function () {
+  $.getJSON('/api/accounts').then(function (data) {
+    const payload = data.map(function (a) {
+      return { name: a.name, code: a.code, element: a.element, sort_order: a.sort_order };
+    });
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'accounts.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+});
+
 // ---- バッチ追加 ----
 $('#btn-batch-accounts-save').on('click', function () {
   $('#batch-accounts-result').html('');
