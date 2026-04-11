@@ -3,7 +3,7 @@ import uuid
 from datetime import date as dt, timedelta
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required
-from app import get_db, db_required
+from helpers import get_db, db_required
 
 journal_bp = Blueprint('journal', __name__)
 

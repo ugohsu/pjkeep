@@ -4,7 +4,7 @@ import sqlite3
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, send_file
 from flask_login import login_required, current_user
 from datetime import date as dt
-from app import get_db, get_db_path, get_users_db, DATA_DIR, BASE_DIR
+from helpers import get_db, get_db_path, get_users_db, DATA_DIR, BASE_DIR
 
 init_bp = Blueprint('init_bp', __name__)
 
@@ -203,7 +203,7 @@ def api_init_description():
 @init_bp.get('/api/db/download')
 @login_required
 def api_db_download():
-    from app import get_db, db_required
+    from helpers import get_db, db_required
     db_path = get_db_path()
     if not db_path or not os.path.exists(db_path):
         return jsonify({'error': 'DBが設定されていません'}), 503

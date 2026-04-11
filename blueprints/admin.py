@@ -3,7 +3,7 @@ import os
 from functools import wraps
 from flask import Blueprint, render_template, request, jsonify, redirect
 from flask_login import current_user
-from app import get_users_db, DATA_DIR
+from helpers import get_users_db, DATA_DIR
 
 admin_bp = Blueprint('admin', __name__)
 

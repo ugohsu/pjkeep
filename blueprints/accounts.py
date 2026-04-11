@@ -2,7 +2,7 @@
 import sqlite3
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required
-from app import get_db, db_required
+from helpers import get_db, db_required
 
 accounts_bp = Blueprint('accounts', __name__)
 

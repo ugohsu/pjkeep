@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import date as dt
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required
-from app import get_db, db_required, tsv_response
+from helpers import get_db, db_required, tsv_response
 
 report_bp = Blueprint('report', __name__)
 
