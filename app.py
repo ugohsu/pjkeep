@@ -419,6 +419,52 @@ def api_journal_delete(transaction_id):
     db.commit()
     return jsonify({'ok': True})
 
+@app.put('/api/journal/transaction/<transaction_id>')
+@db_required
+def api_journal_update(transaction_id):
+    db = get_db()
+    count = db.execute(
+        'SELECT COUNT(*) FROM journal WHERE transaction_id=?', (transaction_id,)
+    ).fetchone()[0]
+    if count == 0:
+        return jsonify({'error': '取引が見つかりません'}), 404
+
+    data = request.json or {}
+    entry_date = data.get('entry_date', '').strip()
+    note = data.get('note', '').strip()
+    lines = data.get('lines', [])
+
+    if not entry_date:
+        return jsonify({'error': '取引日は必須です'}), 400
+    if len(lines) < 2:
+        return jsonify({'error': '2行以上入力してください'}), 400
+    for line in lines:
+        if not line.get('account_id') or not line.get('debit_credit') or not line.get('amount'):
+            return jsonify({'error': '各行に勘定科目・借貸・金額が必要です'}), 400
+        if line['debit_credit'] not in ('debit', 'credit'):
+            return jsonify({'error': '借貸の値が不正です'}), 400
+        if int(line['amount']) <= 0:
+            return jsonify({'error': '金額は1以上の整数を入力してください'}), 400
+    debit_total  = sum(int(l['amount']) for l in lines if l['debit_credit'] == 'debit')
+    credit_total = sum(int(l['amount']) for l in lines if l['debit_credit'] == 'credit')
+    if debit_total != credit_total:
+        return jsonify({'error': f'借方合計 {debit_total:,} と貸方合計 {credit_total:,} が一致しません'}), 400
+
+    try:
+        db.execute('DELETE FROM journal WHERE transaction_id=?', (transaction_id,))
+        for line in lines:
+            db.execute(
+                'INSERT INTO journal (transaction_id, entry_date, account_id, debit_credit, amount, note) '
+                'VALUES (?,?,?,?,?,?)',
+                (transaction_id, entry_date, int(line['account_id']),
+                 line['debit_credit'], int(line['amount']), note)
+            )
+        db.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        db.rollback()
+        return jsonify({'error': str(e)}), 500
+
 # ---------- duplicate detection ----------
 
 def detect_duplicate(db, date_val, import_note, lines, n_max_days=7):

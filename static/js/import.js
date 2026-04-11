@@ -19,6 +19,7 @@ const DC_JA = { debit: '借方', credit: '貸方' };
 const ELEM_JA = { assets: '資産', liabilities: '負債', equity: '純資産', revenues: '収益', expenses: '費用' };
 
 let previewData = null;  // { transactions: [...], errors: [...] }
+let accountsList = [];   // [{id, name, code, element}, ...]
 
 // ---- ファイル選択 ----
 $('#json-file').on('change', function () {
@@ -72,6 +73,13 @@ $('#btn-preview').on('click', function () {
 });
 
 // ---- プレビュー描画 ----
+function accountOptionsHtml(selectedCode) {
+  return accountsList.map(function (a) {
+    const sel = a.code === selectedCode ? 'selected' : '';
+    return `<option value="${escHtml(a.code)}" data-name="${escHtml(a.name)}" ${sel}>${escHtml(a.name)}</option>`;
+  }).join('');
+}
+
 function renderPreview(res) {
   const txns = res.transactions || [];
   const errors = res.errors || [];
@@ -120,14 +128,15 @@ function renderPreview(res) {
       if (l.debit_credit === 'debit') debitTotal += l.amount;
       else creditTotal += l.amount;
     });
+    const balOk = debitTotal === creditTotal;
 
-    // ヘッダー行
+    // ヘッダー行（日付・摘要を編集可能に）
     html += `<div class="card mb-2 ${cardClass}" data-idx="${i}">`;
-    html += `<div class="card-header ${headerClass} d-flex align-items-center gap-2 py-2">`;
+    html += `<div class="card-header ${headerClass} d-flex align-items-center gap-2 py-2 flex-wrap">`;
     html += `<input type="checkbox" class="form-check-input txn-check" ${checked} ${disabled} data-idx="${i}">`;
     html += `<span class="fw-bold">#${i + 1}</span>`;
-    html += `<span>${escHtml(txn.date)}</span>`;
-    if (txn.note) html += `<span class="text-muted">${escHtml(txn.note)}</span>`;
+    html += `<input type="date" class="form-control form-control-sm txn-date" style="width:145px" value="${escHtml(txn.date)}" data-idx="${i}">`;
+    html += `<input type="text" class="form-control form-control-sm txn-note" style="min-width:0;flex:1" value="${escHtml(txn.note || '')}" placeholder="摘要" data-idx="${i}">`;
     if (lowConf) html += `<span class="badge bg-warning text-dark ms-1">確信度 ${(conf * 100).toFixed(0)}%</span>`;
     if (highDup) html += `<span class="badge bg-warning text-dark ms-1">⚠ 重複の可能性 ${(dupProb * 100).toFixed(0)}%</span>`;
     else if (midDup) html += `<span class="badge bg-warning text-dark ms-1" style="opacity:.7">重複の可能性 ${(dupProb * 100).toFixed(0)}%</span>`;
@@ -141,25 +150,36 @@ function renderPreview(res) {
       html += `<p class="small text-muted mb-2"><em>${escHtml(txn._comment)}</em></p>`;
     }
 
-    // 仕訳行テーブル
-    html += `<table class="table table-sm table-bordered mb-1" style="max-width:600px">`;
-    html += `<thead class="table-light"><tr><th>借/貸</th><th>勘定科目</th><th class="text-end">金額</th></tr></thead>`;
+    // 仕訳行テーブル（編集可能）
+    html += `<table class="table table-sm table-bordered mb-1" style="max-width:640px">`;
+    html += `<thead class="table-light"><tr><th style="width:95px">借/貸</th><th>勘定科目</th><th class="text-end" style="width:130px">金額</th></tr></thead>`;
     html += `<tbody>`;
-    (txn.lines || []).forEach(function (line) {
-      const dcBadge = line.debit_credit === 'debit'
-        ? '<span class="badge bg-primary">借方</span>'
-        : '<span class="badge bg-secondary">貸方</span>';
+    (txn.lines || []).forEach(function (line, j) {
       html += `<tr>`;
-      html += `<td>${dcBadge}</td>`;
-      html += `<td><code>${escHtml(line.account_code)}</code> ${escHtml(line.account_name)}</td>`;
-      html += `<td class="text-end">${line.amount.toLocaleString()}</td>`;
+      // 借/貸 select
+      html += `<td>
+        <select class="form-select form-select-sm line-dc" data-idx="${i}" data-line="${j}">
+          <option value="debit"  ${line.debit_credit === 'debit'  ? 'selected' : ''}>借方</option>
+          <option value="credit" ${line.debit_credit === 'credit' ? 'selected' : ''}>貸方</option>
+        </select>
+      </td>`;
+      // 勘定科目 select
+      html += `<td>
+        <select class="form-select form-select-sm line-account" data-idx="${i}" data-line="${j}">
+          ${accountOptionsHtml(line.account_code)}
+        </select>
+      </td>`;
+      // 金額 input
+      html += `<td>
+        <input type="number" class="form-control form-control-sm text-end line-amount" min="1" step="1"
+               value="${line.amount}" data-idx="${i}" data-line="${j}">
+      </td>`;
       html += `</tr>`;
     });
     html += `</tbody>`;
     html += `<tfoot class="table-light"><tr>`;
     html += `<td colspan="2" class="text-end small text-muted">借方合計 / 貸方合計</td>`;
-    const balOk = debitTotal === creditTotal;
-    html += `<td class="text-end small fw-bold ${balOk ? '' : 'text-danger'}">`;
+    html += `<td class="text-end small fw-bold balance-cell ${balOk ? '' : 'text-danger'}">`;
     html += `${debitTotal.toLocaleString()} / ${creditTotal.toLocaleString()}`;
     html += `</td></tr></tfoot>`;
     html += `</table>`;
@@ -183,7 +203,7 @@ function renderPreview(res) {
     // エラー一覧
     const errs = errorsByIdx[i] || [];
     if (errs.length > 0) {
-      html += `<ul class="mb-0 small text-danger">`;
+      html += `<ul class="mb-0 small text-danger preview-errors">`;
       errs.forEach(msg => { html += `<li>${escHtml(msg)}</li>`; });
       html += `</ul>`;
     }
@@ -193,6 +213,88 @@ function renderPreview(res) {
 
   $('#preview-list').html(html);
   $('#step-preview').show();
+}
+
+// ---- プレビュー編集イベント ----
+
+// 日付変更
+$(document).on('change', '.txn-date', function () {
+  const idx = parseInt($(this).data('idx'), 10);
+  previewData.transactions[idx].date = $(this).val();
+});
+
+// 摘要変更
+$(document).on('input', '.txn-note', function () {
+  const idx = parseInt($(this).data('idx'), 10);
+  previewData.transactions[idx].note = $(this).val();
+});
+
+// 仕訳行の借貸・勘定科目・金額変更
+$(document).on('change input', '.line-dc, .line-account, .line-amount', function () {
+  const idx = parseInt($(this).data('idx'), 10);
+  const j   = parseInt($(this).data('line'), 10);
+  syncLine(idx, j);
+  revalidateBalance(idx);
+});
+
+function syncLine(idx, j) {
+  const card = $(`[data-idx="${idx}"].card`);
+  const row  = card.find('tbody tr').eq(j);
+  const dc   = row.find('.line-dc').val();
+  const code = row.find('.line-account').val();
+  const name = row.find('.line-account option:selected').data('name') || '';
+  const amount = parseInt(row.find('.line-amount').val(), 10) || 0;
+  previewData.transactions[idx].lines[j] = {
+    account_code: code,
+    account_name: name,
+    debit_credit: dc,
+    amount: amount,
+  };
+}
+
+function revalidateBalance(idx) {
+  const txn = previewData.transactions[idx];
+  let debit = 0, credit = 0;
+  (txn.lines || []).forEach(l => {
+    if (l.debit_credit === 'debit') debit += l.amount;
+    else credit += l.amount;
+  });
+  const ok = debit > 0 && debit === credit;
+
+  const card = $(`[data-idx="${idx}"].card`);
+  const cell = card.find('.balance-cell');
+  cell.text(`${debit.toLocaleString()} / ${credit.toLocaleString()}`);
+  cell.toggleClass('text-danger', !ok);
+
+  // エラーメッセージ更新
+  const errList = card.find('.preview-errors');
+  if (!ok) {
+    const msg = `借方合計 ${debit.toLocaleString()} と貸方合計 ${credit.toLocaleString()} が一致しません`;
+    if (errList.length) {
+      errList.html(`<li>${escHtml(msg)}</li>`);
+    } else {
+      card.find('.card-body').append(`<ul class="mb-0 small text-danger preview-errors"><li>${escHtml(msg)}</li></ul>`);
+    }
+  } else {
+    errList.remove();
+  }
+
+  // チェックボックスと valid フラグを更新
+  previewData.transactions[idx].valid = ok;
+  const check = card.find('.txn-check');
+  check.prop('disabled', !ok);
+  if (!ok) check.prop('checked', false);
+  else if (!check.prop('checked')) check.prop('checked', true);
+
+  // カードのボーダー色更新
+  card.removeClass('border-danger border-warning border-opacity-50');
+  card.find('.card-header').removeClass('bg-danger-subtle bg-warning-subtle bg-light');
+  if (!ok) {
+    card.addClass('border-danger');
+    card.find('.card-header').addClass('bg-danger-subtle');
+  } else {
+    card.find('.card-header').addClass('bg-light');
+  }
 }
 
 // ---- 全選択 / 全解除 ----
@@ -259,3 +361,10 @@ function escHtml(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
+
+// ---- 初期化 ----
+$(function () {
+  $.getJSON('/api/accounts').then(function (data) {
+    accountsList = data;
+  });
+});

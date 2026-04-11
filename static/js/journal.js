@@ -1,7 +1,19 @@
 // journal.js - 仕訳帳一覧
 
+let accountsList = [];
+let currentTransactions = [];
+let editingTid = null;
+
 function fmt(n) {
   return Number(n).toLocaleString('ja-JP');
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 function showAlert(msg, type) {
@@ -12,6 +24,12 @@ function showAlert(msg, type) {
 
 function dcLabel(dc) {
   return dc === 'debit' ? '借方' : '貸方';
+}
+
+function loadAccounts() {
+  return $.getJSON('/api/accounts').then(function(data) {
+    accountsList = data;
+  });
 }
 
 function loadMonths() {
@@ -41,6 +59,8 @@ function loadJournal(ym) {
 }
 
 function renderJournal(transactions) {
+  currentTransactions = transactions;
+
   // 日付でグループ化して表示
   let html = '<div class="list-group">';
   transactions.forEach(function(tx) {
@@ -56,7 +76,7 @@ function renderJournal(transactions) {
     tx.lines.forEach(function(line) {
       linesHtml += `<tr>
         <td style="width:50px"><span class="badge ${line.debit_credit==='debit'?'bg-primary':'bg-secondary'}">${dcLabel(line.debit_credit)}</span></td>
-        <td>${line.account_name}</td>
+        <td>${escHtml(line.account_name)}</td>
         <td class="text-end">¥${fmt(line.amount)}</td>
       </tr>`;
     });
@@ -67,9 +87,9 @@ function renderJournal(transactions) {
         <div class="d-flex justify-content-between align-items-start gap-2">
           <div class="flex-grow-1">
             <div class="d-flex align-items-center gap-2 mb-1">
-              <span class="fw-bold">${tx.entry_date}</span>
-              <span class="text-muted small">${tx.note || ''}</span>
-              <span class="ms-auto text-end small text-muted">${debitNames} / ${creditNames}　¥${fmt(totalAmt)}</span>
+              <span class="fw-bold">${escHtml(tx.entry_date)}</span>
+              <span class="text-muted small">${escHtml(tx.note || '')}</span>
+              <span class="ms-auto text-end small text-muted">${escHtml(debitNames)} / ${escHtml(creditNames)}　¥${fmt(totalAmt)}</span>
             </div>
             <div class="collapse" id="detail-${tx.transaction_id}">
               ${linesHtml}
@@ -78,6 +98,8 @@ function renderJournal(transactions) {
           <div class="d-flex gap-1 flex-shrink-0">
             <button class="btn btn-sm btn-outline-secondary btn-toggle"
                     data-bs-toggle="collapse" data-bs-target="#detail-${tx.transaction_id}">詳細</button>
+            <button class="btn btn-sm btn-outline-primary btn-edit"
+                    data-tid="${tx.transaction_id}">編集</button>
             <button class="btn btn-sm btn-outline-danger btn-delete"
                     data-tid="${tx.transaction_id}">削除</button>
           </div>
@@ -87,6 +109,128 @@ function renderJournal(transactions) {
   html += '</div>';
   $('#journal-list').html(html);
 }
+
+// ---- 編集モーダル ----
+
+function accountOptions(selectedId) {
+  return accountsList.map(function(a) {
+    const sel = a.id === selectedId ? 'selected' : '';
+    return `<option value="${a.id}" ${sel}>${escHtml(a.name)}</option>`;
+  }).join('');
+}
+
+function addEditRow(dc, accountId, amount) {
+  const row = $(`
+    <tr>
+      <td>
+        <select class="form-select form-select-sm edit-dc">
+          <option value="debit"  ${dc === 'debit'  ? 'selected' : ''}>借方</option>
+          <option value="credit" ${dc === 'credit' ? 'selected' : ''}>貸方</option>
+        </select>
+      </td>
+      <td>
+        <select class="form-select form-select-sm edit-account">${accountOptions(accountId)}</select>
+      </td>
+      <td>
+        <input type="number" class="form-control form-control-sm edit-amount" min="1" step="1" value="${amount || ''}">
+      </td>
+      <td>
+        <button type="button" class="btn btn-sm btn-outline-danger edit-remove-row">×</button>
+      </td>
+    </tr>
+  `);
+  $('#edit-lines-body').append(row);
+}
+
+function updateEditBalance() {
+  let debit = 0, credit = 0;
+  $('#edit-lines-body tr').each(function() {
+    const dc  = $(this).find('.edit-dc').val();
+    const amt = parseInt($(this).find('.edit-amount').val(), 10);
+    if (!isNaN(amt) && amt > 0) {
+      if (dc === 'debit') debit += amt;
+      else credit += amt;
+    }
+  });
+  if (debit === 0 && credit === 0) {
+    $('#edit-balance').html('');
+    return;
+  }
+  const ok  = debit > 0 && debit === credit;
+  const cls = ok ? 'text-success' : 'text-danger';
+  $('#edit-balance').html(
+    `借方合計 / 貸方合計: <span class="${cls} fw-bold">${fmt(debit)} / ${fmt(credit)}</span>`
+  );
+}
+
+function openEditModal(tx) {
+  editingTid = tx.transaction_id;
+  $('#edit-date').val(tx.entry_date);
+  $('#edit-note').val(tx.note || '');
+  $('#edit-lines-body').empty();
+  tx.lines.forEach(function(line) {
+    addEditRow(line.debit_credit, line.account_id, line.amount);
+  });
+  updateEditBalance();
+  new bootstrap.Modal('#editTxnModal').show();
+}
+
+$(document).on('click', '.btn-edit', function() {
+  const tid = $(this).data('tid');
+  const tx  = currentTransactions.find(t => t.transaction_id === tid);
+  if (tx) openEditModal(tx);
+});
+
+$(document).on('change input', '#edit-lines-body .edit-dc, #edit-lines-body .edit-amount', updateEditBalance);
+
+$(document).on('click', '.edit-remove-row', function() {
+  if ($('#edit-lines-body tr').length <= 2) {
+    alert('最低2行必要です');
+    return;
+  }
+  $(this).closest('tr').remove();
+  updateEditBalance();
+});
+
+$('#edit-add-row').on('click', function() {
+  addEditRow('debit', accountsList[0]?.id, '');
+  updateEditBalance();
+});
+
+$('#btn-edit-save').on('click', function() {
+  const entry_date = $('#edit-date').val();
+  const note       = $('#edit-note').val().trim();
+  if (!entry_date) { alert('取引日を入力してください'); return; }
+
+  const lines = [];
+  let valid = true;
+  $('#edit-lines-body tr').each(function() {
+    const dc         = $(this).find('.edit-dc').val();
+    const account_id = parseInt($(this).find('.edit-account').val(), 10);
+    const amount     = parseInt($(this).find('.edit-amount').val(), 10);
+    if (isNaN(amount) || amount <= 0) { alert('金額を正しく入力してください'); valid = false; return false; }
+    lines.push({ account_id, debit_credit: dc, amount });
+  });
+  if (!valid) return;
+
+  $.ajax({
+    url: `/api/journal/transaction/${editingTid}`,
+    method: 'PUT',
+    contentType: 'application/json',
+    data: JSON.stringify({ entry_date, note, lines }),
+    success: function() {
+      bootstrap.Modal.getInstance('#editTxnModal').hide();
+      const ym = $('#ym-select').val();
+      showAlert('更新しました', 'success');
+      loadJournal(ym);
+    },
+    error: function(xhr) {
+      alert(xhr.responseJSON?.error || '更新に失敗しました');
+    }
+  });
+});
+
+// ---- 削除 ----
 
 $(document).on('click', '.btn-delete', function() {
   const tid = $(this).data('tid');
@@ -153,6 +297,7 @@ $('#btn-journal-period-ok').on('click', function() {
 });
 
 $(function() {
+  loadAccounts();
   loadMonths().then(function() {
     const ym = $('#ym-select').val();
     if (ym) loadJournal(ym);
