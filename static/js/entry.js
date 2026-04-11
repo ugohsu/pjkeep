@@ -20,7 +20,7 @@ function loadAccounts() {
     const dl = $('#account-list').empty();
     data.forEach(function(a) {
       accountMap[a.name] = a;
-      dl.append(`<option value="${$('<div>').text(a.name).html()}">`);
+      dl.append(`<option value="${$('<div>').text(a.name).html()}" label="${a.element}">`);
     });
   });
 }

@@ -1,8 +1,8 @@
 // accounts.js - 勘定科目マスタ
 
 const ELEMENT_LABELS = {
-  assets: '資産', liabilities: '負債', equity: '純資産',
-  revenues: '収益', expenses: '費用'
+  assets: '資産 (assets)', liabilities: '負債 (liabilities)', equity: '純資産 (equity)',
+  revenues: '収益 (revenues)', expenses: '費用 (expenses)'
 };
 const ELEMENT_ORDER = ['assets', 'liabilities', 'equity', 'revenues', 'expenses'];
 
