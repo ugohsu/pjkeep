@@ -211,24 +211,36 @@ def detect_duplicate(db, date_val, import_note, lines, n_max_days=7):
             'amount':       r['amount'],
         })
 
+    def jaccard(set_a, set_b):
+        union = set_a | set_b
+        return len(set_a & set_b) / len(union) if union else 1.0
+
+    target_debit_codes  = {l['account_code'] for l in lines if l['debit_credit'] == 'debit'}
+    target_credit_codes = {l['account_code'] for l in lines if l['debit_credit'] == 'credit'}
+
     best, best_prob = None, 0.0
     for tid, txn in by_txn.items():
         cand_amount = sum(l['amount'] for l in txn['lines'] if l['debit_credit'] == 'debit')
         if cand_amount != target_amount:
             continue
-        cand_structure = frozenset((l['account_code'], l['debit_credit']) for l in txn['lines'])
-        if cand_structure != target_structure:
-            continue
         try:
             cand_date = dt.fromisoformat(txn['date'])
         except ValueError:
             continue
+
+        cand_debit_codes  = {l['account_code'] for l in txn['lines'] if l['debit_credit'] == 'debit'}
+        cand_credit_codes = {l['account_code'] for l in txn['lines'] if l['debit_credit'] == 'credit'}
+        structure_score = (jaccard(target_debit_codes, cand_debit_codes) +
+                           jaccard(target_credit_codes, cand_credit_codes)) / 2
+        if structure_score < 0.3:
+            continue
+
         date_diff = abs((target_date - cand_date).days)
         date_score = max(0.0, 1.0 - date_diff / n_max_days)
         i_note = (import_note or '').strip()
         t_note = (txn['note'] or '').strip()
         bonus = 1.1 if (i_note and t_note and (i_note in t_note or t_note in i_note)) else 1.0
-        probability = min(1.0, date_score * bonus)
+        probability = min(1.0, date_score * structure_score * bonus)
         if probability > best_prob:
             best_prob = probability
             best = {
