@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import date as dt
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required
-from helpers import get_db, db_required, tsv_response
+from helpers import get_db, db_required, tsv_response, get_closing_amounts
 
 report_bp = Blueprint('report', __name__)
 
@@ -97,7 +97,32 @@ def api_report_bs():
 
     cum_rev = pl_row['revenues'] or 0
     cum_exp = pl_row['expenses'] or 0
-    cum_net = cum_rev - cum_exp
+    raw_net = cum_rev - cum_exp
+
+    # 振替分を累計純損益から差し引き、振替先純資産科目の残高に加算
+    closing_amounts = get_closing_amounts(get_db())
+    per_account_transferred = defaultdict(int)
+    total_transferred = 0
+    for c in closing_amounts:
+        if c['closing_date'] <= end_date:
+            per_account_transferred[c['account_id']] += c['amount']
+            total_transferred += c['amount']
+
+    existing_equity_ids = set()
+    for item in equity:
+        existing_equity_ids.add(item['id'])
+        item['amount'] += per_account_transferred.get(item['id'], 0)
+
+    # 仕訳が一件もない振替先科目は bs_rows に含まれないため個別に追加
+    for acc_id, amt in per_account_transferred.items():
+        if acc_id not in existing_equity_ids:
+            acc = db.execute(
+                'SELECT id, name FROM accounts WHERE id=?', (acc_id,)
+            ).fetchone()
+            if acc:
+                equity.append({'id': acc['id'], 'name': acc['name'], 'amount': amt})
+
+    cum_net = raw_net - total_transferred
 
     return jsonify({
         'ym': ym,
@@ -190,7 +215,7 @@ def api_export_report():
             GROUP BY a.id ORDER BY a.element, a.sort_order, a.name
         ''', (from_date, to_date)).fetchall()
         bs_rows = db.execute('''
-            SELECT a.name, a.element,
+            SELECT a.id, a.name, a.element,
                    SUM(CASE WHEN j.debit_credit='debit'  THEN j.amount ELSE 0 END) as dt,
                    SUM(CASE WHEN j.debit_credit='credit' THEN j.amount ELSE 0 END) as ct
             FROM journal j JOIN accounts a ON j.account_id=a.id
@@ -222,7 +247,7 @@ def api_export_report():
             GROUP BY a.id ORDER BY a.element, a.sort_order, a.name
         ''', (ym,)).fetchall()
         bs_rows = db.execute('''
-            SELECT a.name, a.element,
+            SELECT a.id, a.name, a.element,
                    SUM(CASE WHEN j.debit_credit='debit'  THEN j.amount ELSE 0 END) as dt,
                    SUM(CASE WHEN j.debit_credit='credit' THEN j.amount ELSE 0 END) as ct
             FROM journal j JOIN accounts a ON j.account_id=a.id
@@ -257,14 +282,37 @@ def api_export_report():
     data.append(['当期純利益', '', rev_total - exp_total])
     data.append(['', '', ''])
 
-    cum_net = (pl_cum_row['rev'] or 0) - (pl_cum_row['exp'] or 0)
+    raw_net = (pl_cum_row['rev'] or 0) - (pl_cum_row['exp'] or 0)
+
+    # 振替を反映
+    bs_end = to_date if (from_date and to_date) else f'{ym}-{calendar.monthrange(int(ym[:4]), int(ym[5:7]))[1]:02d}'
+    closing_amounts = get_closing_amounts(get_db())
+    per_account_transferred = defaultdict(int)
+    total_transferred = 0
+    for c in closing_amounts:
+        if c['closing_date'] <= bs_end:
+            per_account_transferred[c['account_id']] += c['amount']
+            total_transferred += c['amount']
+    cum_net = raw_net - total_transferred
+
     data.append([f'【貸借対照表】{label_bs}', '', ''])
     data.append(['区分', '勘定科目', '金額'])
     totals = {'assets': 0, 'liabilities': 0, 'equity': 0}
+    seen_equity_ids = set()
     for r in bs_rows:
         amt = (r['dt'] - r['ct']) if r['element'] == 'assets' else (r['ct'] - r['dt'])
+        if r['element'] == 'equity':
+            amt += per_account_transferred.get(r['id'], 0)
+            seen_equity_ids.add(r['id'])
         data.append([ELEM_JA[r['element']], r['name'], amt])
         totals[r['element']] += amt
+    # 仕訳が一件もない振替先科目を追加
+    for acc_id, amt in per_account_transferred.items():
+        if acc_id not in seen_equity_ids:
+            acc = db.execute('SELECT name FROM accounts WHERE id=?', (acc_id,)).fetchone()
+            if acc:
+                data.append(['純資産', acc['name'], amt])
+                totals['equity'] += amt
     data.append(['資産合計', '', totals['assets']])
     data.append(['負債合計', '', totals['liabilities']])
     data.append(['純資産', '累計純損益', cum_net])
@@ -332,6 +380,9 @@ def api_export_report_monthly():
         running_net += (month_rev - month_exp)
         cum_net[ym] = running_net
 
+    # 振替データを一括取得（月次ループで都度フィルタリング）
+    closing_amounts = get_closing_amounts(db)
+
     headers = ['決算月', '決算日', '当期純利益',
                '資産合計', '負債合計', '純資産合計',
                '収益合計', '費用合計', '累計純損益'] + [a['name'] for a in accounts]
@@ -339,24 +390,35 @@ def api_export_report_monthly():
     for ym in months:
         year, month = int(ym[:4]), int(ym[5:7])
         last_day = calendar.monthrange(year, month)[1]
-        end_date = f'{year}/{month:02d}/{last_day:02d}'
+        end_date_display = f'{year}/{month:02d}/{last_day:02d}'
+        end_date_iso     = f'{year}-{month:02d}-{last_day:02d}'
 
         pl_data = monthly_pl.get(ym, {})
         month_rev = sum(v for acc_id, v in pl_data.items() if acc_element.get(acc_id) == 'revenues')
         month_exp = sum(v for acc_id, v in pl_data.items() if acc_element.get(acc_id) == 'expenses')
+
+        # 振替を反映
+        per_account_transferred = defaultdict(int)
+        total_transferred = 0
+        for c in closing_amounts:
+            if c['closing_date'] <= end_date_iso:
+                per_account_transferred[c['account_id']] += c['amount']
+                total_transferred += c['amount']
 
         bs_data = cum_bs.get(ym, {})
         total_assets = sum(v for acc_id, v in bs_data.items() if acc_element.get(acc_id) == 'assets')
         total_liab   = sum(v for acc_id, v in bs_data.items() if acc_element.get(acc_id) == 'liabilities')
         total_equity = sum(v for acc_id, v in bs_data.items() if acc_element.get(acc_id) == 'equity') + cum_net.get(ym, 0)
 
+        cum_net_display = cum_net.get(ym, 0) - total_transferred
+
         acc_values = [
             pl_data.get(a['id'], 0) if a['element'] in ('revenues', 'expenses')
-            else bs_data.get(a['id'], 0)
+            else bs_data.get(a['id'], 0) + (per_account_transferred.get(a['id'], 0) if a['element'] == 'equity' else 0)
             for a in accounts
         ]
-        data.append([f'{year}{month:02d}', end_date, month_rev - month_exp,
+        data.append([f'{year}{month:02d}', end_date_display, month_rev - month_exp,
                      total_assets, total_liab, total_equity,
-                     month_rev, month_exp, cum_net.get(ym, 0)] + acc_values)
+                     month_rev, month_exp, cum_net_display] + acc_values)
 
     return tsv_response(data, headers, f'report_monthly_{months[0]}_{months[-1]}.tsv')

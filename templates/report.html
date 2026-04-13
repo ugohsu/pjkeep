@@ -40,6 +40,56 @@
   </div>
 </div>
 
+<!-- 累計純損益の振替 -->
+<div class="row g-3 mt-1">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header fw-bold d-flex align-items-center">
+        累計純損益の振替
+        <button class="btn btn-sm btn-outline-primary ms-auto" id="btn-closing-new">新規登録</button>
+      </div>
+      <div class="card-body p-0">
+        <div id="closing-list-area"><div class="p-3 text-muted small">読み込み中...</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 振替登録モーダル -->
+<div class="modal fade" id="closingModal" tabindex="-1" aria-labelledby="closingModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="closingModalLabel">累計純損益の振替登録</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="closing-modal-alert"></div>
+        <div class="mb-3">
+          <label class="form-label" for="closing-date">振替日</label>
+          <input type="date" class="form-control" id="closing-date">
+          <div class="form-text">振替日前日までの累計純損益が振替対象になります。</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="closing-account">振替先科目（純資産）</label>
+          <select class="form-select" id="closing-account"></select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="closing-note">備考</label>
+          <input type="text" class="form-control" id="closing-note" placeholder="任意">
+        </div>
+        <div class="alert alert-light border py-2 small mb-0" id="closing-preview-area" style="display:none">
+          振替金額：<span id="closing-preview-amount" class="fw-bold"></span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-primary" id="btn-closing-save">登録</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 期間指定エクスポートモーダル -->
 <div class="modal fade" id="reportPeriodModal" tabindex="-1" aria-labelledby="reportPeriodModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-sm">

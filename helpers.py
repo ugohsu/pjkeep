@@ -64,6 +64,19 @@ def get_db_path():
     return None
 
 
+def _apply_migrations(db):
+    """既存 DB に対してスキーマ追加を冪等に適用する。"""
+    db.execute('''CREATE TABLE IF NOT EXISTS closings (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        closing_date  TEXT    NOT NULL UNIQUE,
+        account_id    INTEGER NOT NULL REFERENCES accounts(id),
+        note          TEXT,
+        created_at    TEXT    DEFAULT (datetime('now','localtime'))
+    )''')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_closings_closing_date ON closings(closing_date)')
+    db.commit()
+
+
 def get_db():
     db_path = get_db_path()
     if not db_path or not os.path.exists(db_path):
@@ -72,6 +85,7 @@ def get_db():
         g.db = sqlite3.connect(db_path)
         g.db.row_factory = sqlite3.Row
         g.db.execute('PRAGMA foreign_keys = ON')
+        _apply_migrations(g.db)
     return g.db
 
 
@@ -94,6 +108,56 @@ def db_required(f):
                 return redirect(url_for('init_bp.init'))
         return f(*args, **kwargs)
     return decorated
+
+
+# ---------- Closing helpers ----------
+
+def get_closing_amounts(db):
+    """
+    closings テーブルの全レコードについて振替金額を動的計算して返す。
+
+    振替金額の定義:
+        振替日 D の金額 = (entry_date < D の仕訳の収益−費用合計)
+                         − (D より前の振替の合計)
+
+    これは「前回振替後から今回振替日前日までの累計純損益」に相当する。
+
+    戻り値: [{'id', 'closing_date', 'account_id', 'account_name', 'note', 'amount'}, ...]
+    日付昇順。
+    """
+    rows = db.execute('''
+        SELECT c.id, c.closing_date, c.account_id, c.note,
+               a.name as account_name,
+               COALESCE((
+                   SELECT SUM(
+                       CASE WHEN ac.element='revenues' AND j.debit_credit='credit' THEN  j.amount
+                            WHEN ac.element='revenues' AND j.debit_credit='debit'  THEN -j.amount
+                            WHEN ac.element='expenses' AND j.debit_credit='debit'  THEN -j.amount
+                            WHEN ac.element='expenses' AND j.debit_credit='credit' THEN  j.amount
+                            ELSE 0 END)
+                   FROM journal j JOIN accounts ac ON j.account_id = ac.id
+                   WHERE ac.element IN ('revenues','expenses')
+                     AND j.entry_date < c.closing_date
+               ), 0) as gross
+        FROM closings c
+        JOIN accounts a ON c.account_id = a.id
+        ORDER BY c.closing_date
+    ''').fetchall()
+
+    result = []
+    prev_gross = 0
+    for r in rows:
+        amount = r['gross'] - prev_gross
+        prev_gross = r['gross']
+        result.append({
+            'id': r['id'],
+            'closing_date': r['closing_date'],
+            'account_id': r['account_id'],
+            'account_name': r['account_name'],
+            'note': r['note'] or '',
+            'amount': amount,
+        })
+    return result
 
 
 # ---------- Utilities ----------

@@ -20,3 +20,13 @@ CREATE TABLE IF NOT EXISTS journal (
 CREATE INDEX IF NOT EXISTS idx_journal_entry_date ON journal(entry_date);
 CREATE INDEX IF NOT EXISTS idx_journal_transaction_id ON journal(transaction_id);
 CREATE INDEX IF NOT EXISTS idx_journal_account_id ON journal(account_id);
+
+CREATE TABLE IF NOT EXISTS closings (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    closing_date  TEXT    NOT NULL UNIQUE,
+    account_id    INTEGER NOT NULL REFERENCES accounts(id),
+    note          TEXT,
+    created_at    TEXT    DEFAULT (datetime('now','localtime'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_closings_closing_date ON closings(closing_date);
