@@ -75,6 +75,7 @@ def create_app():
     from blueprints.journal import journal_bp
     from blueprints.report import report_bp
     from blueprints.closing import closing_bp
+    from blueprints.ledger import ledger_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
@@ -83,6 +84,7 @@ def create_app():
     app.register_blueprint(journal_bp)
     app.register_blueprint(report_bp)
     app.register_blueprint(closing_bp)
+    app.register_blueprint(ledger_bp)
 
     return app
 

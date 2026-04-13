@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}元帳{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  <h2 class="mb-0">元帳</h2>
+</div>
+
+<div class="row g-0">
+  <!-- 科目リスト（PC のみ） -->
+  <div class="col-md-3 col-xl-2 d-none d-md-block pe-3">
+    <div class="card">
+      <div class="card-body p-2" id="account-tree">
+        <div class="text-muted small p-2">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- メインエリア -->
+  <div class="col-md-9 col-xl-10">
+    <!-- 科目セレクト（スマホのみ） -->
+    <div class="d-md-none mb-2">
+      <select id="account-select-mobile" class="form-select form-select-sm">
+        <option value="">科目を選択してください</option>
+      </select>
+    </div>
+
+    <!-- 期間フィルタ＋エクスポートボタン -->
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+      <span class="fw-bold" id="selected-account-name" style="min-width:6em"></span>
+      <input type="date" id="filter-from" class="form-control form-control-sm" style="width:auto">
+      <span class="text-muted">〜</span>
+      <input type="date" id="filter-to" class="form-control form-control-sm" style="width:auto">
+      <button class="btn btn-sm btn-outline-primary" id="btn-filter">表示</button>
+      <button class="btn btn-sm btn-outline-secondary ms-auto" id="btn-export" disabled>TSV エクスポート</button>
+    </div>
+
+    <div id="alert-box"></div>
+    <div id="ledger-area">
+      <div class="text-muted p-3">科目を選択してください。</div>
+    </div>
+  </div>
+</div>
+
+<!-- 取引編集モーダル -->
+<div class="modal fade" id="editTxnModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">仕訳を編集</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2 mb-3">
+          <div class="col-auto">
+            <label class="form-label small mb-1">取引日</label>
+            <input type="date" class="form-control form-control-sm" id="edit-date">
+          </div>
+          <div class="col">
+            <label class="form-label small mb-1">摘要</label>
+            <input type="text" class="form-control form-control-sm" id="edit-note" placeholder="任意">
+          </div>
+        </div>
+        <table class="table table-sm table-bordered">
+          <thead class="table-light">
+            <tr><th style="width:90px">借/貸</th><th>勘定科目</th><th style="width:130px">金額</th><th style="width:40px"></th></tr>
+          </thead>
+          <tbody id="edit-lines-body"></tbody>
+        </table>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="edit-add-row">＋ 行を追加</button>
+        <div id="edit-balance" class="mt-2 small"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-danger me-auto" id="btn-edit-delete">削除</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-primary" id="btn-edit-save">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/ledger.js') }}"></script>
+{% endblock %}

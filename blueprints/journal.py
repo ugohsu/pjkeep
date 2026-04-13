@@ -120,6 +120,37 @@ def api_journal_create():
         return jsonify({'error': str(e)}), 500
 
 
+@journal_bp.get('/api/journal/transaction/<transaction_id>')
+@login_required
+@db_required
+def api_journal_get(transaction_id):
+    db = get_db()
+    rows = db.execute('''
+        SELECT j.id, j.transaction_id, j.entry_date, j.debit_credit, j.amount, j.note,
+               a.id as account_id, a.name as account_name, a.element
+        FROM journal j
+        JOIN accounts a ON j.account_id = a.id
+        WHERE j.transaction_id = ?
+        ORDER BY j.debit_credit DESC, j.id
+    ''', (transaction_id,)).fetchall()
+    if not rows:
+        return jsonify({'error': '取引が見つかりません'}), 404
+    tx = {
+        'transaction_id': transaction_id,
+        'entry_date': rows[0]['entry_date'],
+        'note': rows[0]['note'] or '',
+        'lines': [{
+            'id': r['id'],
+            'account_id': r['account_id'],
+            'account_name': r['account_name'],
+            'element': r['element'],
+            'debit_credit': r['debit_credit'],
+            'amount': r['amount'],
+        } for r in rows]
+    }
+    return jsonify(tx)
+
+
 @journal_bp.delete('/api/journal/transaction/<transaction_id>')
 @login_required
 @db_required
