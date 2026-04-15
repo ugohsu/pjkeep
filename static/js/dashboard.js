@@ -3,17 +3,10 @@
 
 let plChart = null;
 
-// Rmd の配色をベースにしたグラデーションパレット
-// 収益：#FFE0B2（薄オレンジ）から濃いオレンジへ
-const REVENUE_PALETTE = [
-    '#FFE0B2', '#FFCC80', '#FFB74D', '#FFA726',
-    '#FF9800', '#FB8C00', '#F57C00', '#EF6C00'
-];
-// 費用：薄青から濃い青へ
-const EXPENSE_PALETTE = [
-    '#E3F2FD', '#BBDEFB', '#90CAF9', '#64B5F6',
-    '#42A5F5', '#2196F3', '#1E88E5', '#1565C0'
-];
+// 収益：Rmd に合わせた薄オレンジ（単色）
+const REVENUE_COLOR = '#FFE0B2';
+// 費用：Rmd に合わせた淡い黄色（単色）
+const EXPENSE_COLOR = '#FFF9C4';
 const NET_INCOME_COLOR = '#DCEDC8'; // Rmd の営業利益色
 const NET_LOSS_COLOR   = 'red';     // Rmd の営業損失色（純赤）
 
@@ -49,20 +42,21 @@ function renderPlChart(data) {
         label: '当期純利益',
         stack: 'debit',
         backgroundColor: NET_INCOME_COLOR,
-        borderColor: 'rgba(0,0,0,0.15)',
+        borderColor: '#555',
         borderWidth: 0.5,
+        borderSkipped: false,
         data: monthly.map(function(m) { return m.net_income > 0 ? m.net_income : 0; })
     });
 
     // 借方スタック（左）：費用科目を逆順で追加（財務諸表の上位科目がグラフ上段に来るよう）
     expenseAccounts.slice().reverse().forEach(function(acc, i) {
-        var colorIdx = expenseAccounts.length - 1 - i;
         datasets.push({
             label: acc.name,
             stack: 'debit',
-            backgroundColor: EXPENSE_PALETTE[colorIdx % EXPENSE_PALETTE.length],
-            borderColor: 'rgba(0,0,0,0.15)',
+            backgroundColor: EXPENSE_COLOR,
+            borderColor: '#555',
             borderWidth: 0.5,
+            borderSkipped: false,
             data: monthly.map(function(m) { return m.by_account[acc.id] || 0; })
         });
     });
@@ -72,20 +66,21 @@ function renderPlChart(data) {
         label: '当期純損失',
         stack: 'credit',
         backgroundColor: NET_LOSS_COLOR,
-        borderColor: 'rgba(0,0,0,0.15)',
+        borderColor: '#555',
         borderWidth: 0.5,
+        borderSkipped: false,
         data: monthly.map(function(m) { return m.net_income < 0 ? -m.net_income : 0; })
     });
 
     // 貸方スタック（右）：収益科目を逆順で追加（財務諸表の上位科目がグラフ上段に来るよう）
-    revenueAccounts.slice().reverse().forEach(function(acc, i) {
-        var colorIdx = revenueAccounts.length - 1 - i;
+    revenueAccounts.slice().reverse().forEach(function(acc) {
         datasets.push({
             label: acc.name,
             stack: 'credit',
-            backgroundColor: REVENUE_PALETTE[colorIdx % REVENUE_PALETTE.length],
-            borderColor: 'rgba(0,0,0,0.15)',
+            backgroundColor: REVENUE_COLOR,
+            borderColor: '#555',
             borderWidth: 0.5,
+            borderSkipped: false,
             data: monthly.map(function(m) { return m.by_account[acc.id] || 0; })
         });
     });
