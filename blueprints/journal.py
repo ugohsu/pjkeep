@@ -3,7 +3,7 @@ import uuid
 from datetime import date as dt, timedelta
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required
-from helpers import get_db, db_required
+from helpers import get_db, db_required, write_required
 
 journal_bp = Blueprint('journal', __name__)
 
@@ -84,6 +84,7 @@ def api_journal_list():
 @journal_bp.post('/api/journal')
 @login_required
 @db_required
+@write_required
 def api_journal_create():
     data = request.json or {}
     entry_date = data.get('entry_date', '').strip()
@@ -154,6 +155,7 @@ def api_journal_get(transaction_id):
 @journal_bp.delete('/api/journal/transaction/<transaction_id>')
 @login_required
 @db_required
+@write_required
 def api_journal_delete(transaction_id):
     db = get_db()
     count = db.execute(
@@ -169,6 +171,7 @@ def api_journal_delete(transaction_id):
 @journal_bp.put('/api/journal/transaction/<transaction_id>')
 @login_required
 @db_required
+@write_required
 def api_journal_update(transaction_id):
     db = get_db()
     if not db.execute(
@@ -351,6 +354,7 @@ def api_import_preview():
 @journal_bp.post('/api/import/commit')
 @login_required
 @db_required
+@write_required
 def api_import_commit():
     import re
     data = request.json or {}

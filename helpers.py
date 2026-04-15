@@ -28,6 +28,12 @@ CREATE TABLE IF NOT EXISTS projects (
     description TEXT,
     owner_id    INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
+CREATE TABLE IF NOT EXISTS project_members (
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    permission TEXT    NOT NULL CHECK(permission IN ('read', 'write')),
+    PRIMARY KEY (project_id, user_id)
+);
 '''
 
 # ---------- User model ----------
@@ -52,6 +58,13 @@ def get_users_db():
         conn.row_factory = sqlite3.Row
         conn.execute('PRAGMA foreign_keys = ON')
         conn.executescript(USERS_SCHEMA)
+        # 既存プロジェクトの owner を project_members に移行（冪等）
+        conn.execute('''
+            INSERT OR IGNORE INTO project_members (project_id, user_id, permission)
+            SELECT id, owner_id, 'write'
+            FROM projects
+            WHERE owner_id IS NOT NULL
+        ''')
         conn.commit()
         g.users_db = conn
     return g.users_db
@@ -85,12 +98,15 @@ def get_db():
         g.db = sqlite3.connect(db_path)
         g.db.row_factory = sqlite3.Row
         g.db.execute('PRAGMA foreign_keys = ON')
+        g.db.execute('PRAGMA journal_mode=WAL')
         _apply_migrations(g.db)
     return g.db
 
 
 def db_required(f):
-    """プロジェクト DB の存在チェック＋オーナーチェックを行うデコレーター。"""
+    """プロジェクト DB の存在チェック＋アクセスチェックを行うデコレーター。
+    通過後は g.project_permission に 'read' または 'write' をセットする。
+    """
     @wraps(f)
     def decorated(*args, **kwargs):
         if get_db() is None:
@@ -99,13 +115,31 @@ def db_required(f):
             return redirect(url_for('init_bp.init'))
         if not current_user.is_admin:
             filename = request.cookies.get('active_db')
-            proj = get_users_db().execute(
-                'SELECT owner_id FROM projects WHERE filename=?', (filename,)
+            member = get_users_db().execute(
+                '''SELECT permission FROM project_members
+                   JOIN projects ON projects.id = project_members.project_id
+                   WHERE projects.filename=? AND project_members.user_id=?''',
+                (filename, current_user.id)
             ).fetchone()
-            if proj is None or proj['owner_id'] != current_user.id:
+            if member is None:
                 if request.path.startswith('/api/'):
                     return jsonify({'error': 'アクセス権がありません'}), 403
                 return redirect(url_for('init_bp.init'))
+            g.project_permission = member['permission']
+        else:
+            g.project_permission = 'write'
+        return f(*args, **kwargs)
+    return decorated
+
+
+def write_required(f):
+    """write 権限チェック。@db_required の内側（直下）に置いて使う。"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if getattr(g, 'project_permission', 'read') != 'write':
+            if request.path.startswith('/api/'):
+                return jsonify({'error': '編集権限がありません'}), 403
+            return redirect(url_for('init_bp.init'))
         return f(*args, **kwargs)
     return decorated
 

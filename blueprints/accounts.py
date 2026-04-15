@@ -2,7 +2,7 @@
 import sqlite3
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required
-from helpers import get_db, db_required
+from helpers import get_db, db_required, write_required
 
 accounts_bp = Blueprint('accounts', __name__)
 
@@ -28,6 +28,7 @@ def api_accounts_list():
 @accounts_bp.post('/api/accounts')
 @login_required
 @db_required
+@write_required
 def api_accounts_create():
     data = request.json or {}
     name = data.get('name', '').strip()
@@ -54,6 +55,7 @@ def api_accounts_create():
 @accounts_bp.put('/api/accounts/<int:account_id>')
 @login_required
 @db_required
+@write_required
 def api_accounts_update(account_id):
     data = request.json or {}
     name = data.get('name', '').strip()
@@ -79,6 +81,7 @@ def api_accounts_update(account_id):
 @accounts_bp.delete('/api/accounts/<int:account_id>')
 @login_required
 @db_required
+@write_required
 def api_accounts_delete(account_id):
     db = get_db()
     count = db.execute(
@@ -94,6 +97,7 @@ def api_accounts_delete(account_id):
 @accounts_bp.post('/api/accounts/batch')
 @login_required
 @db_required
+@write_required
 def api_accounts_batch():
     data = request.json or {}
     accounts_list = data.get('accounts', [])

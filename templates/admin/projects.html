@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}プロジェクト管理{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-3">
+  <h2 class="mb-0">プロジェクト管理</h2>
+</div>
+<div id="alert-box"></div>
+<div class="card">
+  <div class="card-body p-0">
+    <div id="projects-loading" class="text-center text-muted p-3">読み込み中...</div>
+    <table class="table table-sm table-hover mb-0" id="projects-table" style="display:none">
+      <thead class="table-light">
+        <tr>
+          <th>ファイル名</th>
+          <th>説明</th>
+          <th>作成者</th>
+          <th>参加人数</th>
+          <th style="width:120px"></th>
+        </tr>
+      </thead>
+      <tbody id="projects-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- メンバー管理モーダル -->
+<div class="modal fade" id="members-modal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">メンバー管理：<span id="modal-project-name"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="members-loading" class="text-muted small">読み込み中...</div>
+        <table class="table table-sm" id="members-table" style="display:none">
+          <thead class="table-light">
+            <tr><th>ユーザー名</th><th>権限</th><th style="width:80px"></th></tr>
+          </thead>
+          <tbody id="members-tbody"></tbody>
+        </table>
+        <hr>
+        <div class="d-flex gap-2 align-items-end">
+          <div class="flex-grow-1">
+            <label class="form-label small mb-1">ユーザー</label>
+            <select class="form-select form-select-sm" id="add-user-select"></select>
+          </div>
+          <div>
+            <label class="form-label small mb-1">権限</label>
+            <select class="form-select form-select-sm" id="add-permission-select">
+              <option value="read">read（閲覧）</option>
+              <option value="write" selected>write（編集）</option>
+            </select>
+          </div>
+          <div>
+            <button class="btn btn-sm btn-primary" id="btn-add-member">追加</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let currentProjectId = null;
+let allUsers = [];
+
+function showAlert(msg, type) {
+  $('#alert-box').html(`<div class="alert alert-${type} alert-dismissible"><button type="button" class="btn-close" data-bs-dismiss="alert"></button>${msg}</div>`);
+}
+
+function loadProjects() {
+  $.getJSON('/api/admin/projects', function(projects) {
+    $('#projects-loading').hide();
+    const tbody = $('#projects-tbody').empty();
+    projects.forEach(function(p) {
+      const nameEsc = $('<div>').text(p.filename).html();
+      const descEsc = $('<div>').text(p.description || '').html();
+      const ownerEsc = $('<div>').text(p.owner_name || '（削除済み）').html();
+      tbody.append(`<tr>
+        <td class="fw-semibold">${nameEsc}</td>
+        <td class="text-muted small">${descEsc}</td>
+        <td class="small">${ownerEsc}</td>
+        <td class="small">${p.member_count}</td>
+        <td>
+          <button class="btn btn-xs btn-outline-secondary btn-members me-1"
+            data-id="${p.id}" data-name="${nameEsc}">メンバー</button>
+          <button class="btn btn-xs btn-outline-danger btn-del-proj"
+            data-id="${p.id}" data-name="${nameEsc}">削除</button>
+        </td>
+      </tr>`);
+    });
+    $('#projects-table').show();
+  }).fail(function() {
+    $('#projects-loading').text('読み込みに失敗しました');
+  });
+}
+
+function loadUsers() {
+  $.getJSON('/api/admin/users', function(users) {
+    allUsers = users;
+  });
+}
+
+function openMembersModal(projectId, projectName) {
+  currentProjectId = projectId;
+  $('#modal-project-name').text(projectName);
+  $('#members-table').hide();
+  $('#members-loading').show().text('読み込み中...');
+  const modal = new bootstrap.Modal(document.getElementById('members-modal'));
+  modal.show();
+  loadMembers();
+}
+
+function loadMembers() {
+  $.getJSON(`/api/admin/projects/${currentProjectId}/members`, function(members) {
+    $('#members-loading').hide();
+    const tbody = $('#members-tbody').empty();
+    const memberIds = new Set(members.map(m => m.id));
+    members.forEach(function(m) {
+      const nameEsc = $('<div>').text(m.username).html();
+      const permLabel = m.permission === 'write'
+        ? '<span class="badge bg-primary">write</span>'
+        : '<span class="badge bg-secondary">read</span>';
+      const toggle = m.permission === 'write'
+        ? `<button class="btn btn-xs btn-outline-secondary btn-perm-toggle me-1" data-id="${m.id}" data-perm="read">readに変更</button>`
+        : `<button class="btn btn-xs btn-outline-primary btn-perm-toggle me-1" data-id="${m.id}" data-perm="write">writeに変更</button>`;
+      tbody.append(`<tr>
+        <td>${nameEsc}</td>
+        <td>${permLabel}</td>
+        <td>${toggle}<button class="btn btn-xs btn-outline-danger btn-remove-member" data-id="${m.id}">削除</button></td>
+      </tr>`);
+    });
+    $('#members-table').show();
+
+    // 追加ユーザー選択肢を更新（既存メンバーを除外）
+    const sel = $('#add-user-select').empty();
+    allUsers.filter(u => !memberIds.has(u.id)).forEach(function(u) {
+      sel.append(`<option value="${u.id}">${$('<div>').text(u.username).html()}</option>`);
+    });
+  }).fail(function() {
+    $('#members-loading').text('読み込みに失敗しました');
+  });
+}
+
+$(document).on('click', '.btn-members', function() {
+  openMembersModal($(this).data('id'), $(this).data('name'));
+});
+
+$(document).on('click', '.btn-del-proj', function() {
+  const id = $(this).data('id');
+  const name = $(this).data('name');
+  const input = prompt(`「${name}」を削除します。\n確認のためプロジェクト名を入力してください：`);
+  if (input === null) return;
+  if (input !== name) {
+    alert('プロジェクト名が一致しません。削除を中止しました。');
+    return;
+  }
+  $.ajax({
+    url: `/api/admin/projects/${id}`,
+    method: 'DELETE',
+    success: function() {
+      showAlert('削除しました', 'success');
+      loadProjects();
+    },
+    error: function(xhr) {
+      showAlert(xhr.responseJSON?.error || '削除に失敗しました', 'danger');
+    }
+  });
+});
+
+$(document).on('click', '.btn-perm-toggle', function() {
+  const userId = $(this).data('id');
+  const perm = $(this).data('perm');
+  $.ajax({
+    url: `/api/admin/projects/${currentProjectId}/members/${userId}`,
+    method: 'PUT',
+    contentType: 'application/json',
+    data: JSON.stringify({permission: perm}),
+    success: loadMembers,
+    error: function(xhr) { alert(xhr.responseJSON?.error || '変更に失敗しました'); }
+  });
+});
+
+$(document).on('click', '.btn-remove-member', function() {
+  const userId = $(this).data('id');
+  $.ajax({
+    url: `/api/admin/projects/${currentProjectId}/members/${userId}`,
+    method: 'DELETE',
+    success: loadMembers,
+    error: function(xhr) { alert(xhr.responseJSON?.error || '削除に失敗しました'); }
+  });
+});
+
+$('#btn-add-member').on('click', function() {
+  const userId = $('#add-user-select').val();
+  const perm = $('#add-permission-select').val();
+  if (!userId) { alert('ユーザーを選択してください'); return; }
+  $.ajax({
+    url: `/api/admin/projects/${currentProjectId}/members/${userId}`,
+    method: 'PUT',
+    contentType: 'application/json',
+    data: JSON.stringify({permission: perm}),
+    success: function() { loadMembers(); loadProjects(); },
+    error: function(xhr) { alert(xhr.responseJSON?.error || '追加に失敗しました'); }
+  });
+});
+
+loadProjects();
+loadUsers();
+</script>
+{% endblock %}

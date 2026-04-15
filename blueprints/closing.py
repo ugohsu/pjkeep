@@ -2,7 +2,7 @@
 import sqlite3
 from flask import Blueprint, request, jsonify
 from flask_login import login_required
-from helpers import get_db, db_required, get_closing_amounts
+from helpers import get_db, db_required, write_required, get_closing_amounts
 
 closing_bp = Blueprint('closing', __name__)
 
@@ -48,6 +48,7 @@ def api_closings_preview():
 @closing_bp.post('/api/closings')
 @login_required
 @db_required
+@write_required
 def api_closings_create():
     data = request.json or {}
     closing_date = data.get('closing_date', '').strip()
@@ -80,6 +81,7 @@ def api_closings_create():
 @closing_bp.delete('/api/closings/<int:closing_id>')
 @login_required
 @db_required
+@write_required
 def api_closings_delete(closing_id):
     db = get_db()
     db.execute('DELETE FROM closings WHERE id=?', (closing_id,))

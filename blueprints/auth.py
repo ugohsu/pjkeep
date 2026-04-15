@@ -73,13 +73,16 @@ def api_login():
     user = User(row['id'], row['username'], row['role'])
     login_user(user)
     resp = jsonify({'ok': True})
-    # active_db クッキーが他ユーザーのものであればログイン時にクリアする
+    # active_db クッキーがアクセス権のないプロジェクトを指していればクリアする
     active_db = request.cookies.get('active_db')
     if active_db and not user.is_admin:
-        proj = udb.execute(
-            'SELECT owner_id FROM projects WHERE filename=?', (active_db,)
+        member = udb.execute(
+            '''SELECT 1 FROM project_members
+               JOIN projects ON projects.id = project_members.project_id
+               WHERE projects.filename=? AND project_members.user_id=?''',
+            (active_db, user.id)
         ).fetchone()
-        if proj is None or proj['owner_id'] != user.id:
+        if not member:
             resp.delete_cookie('active_db')
     return resp
 

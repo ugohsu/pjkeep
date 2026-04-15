@@ -61,10 +61,13 @@ def init():
             configured = True
         else:
             filename = os.path.basename(db_path)
-            proj = get_users_db().execute(
-                'SELECT owner_id FROM projects WHERE filename=?', (filename,)
+            member = get_users_db().execute(
+                '''SELECT 1 FROM project_members
+                   JOIN projects ON projects.id = project_members.project_id
+                   WHERE projects.filename=? AND project_members.user_id=?''',
+                (filename, current_user.id)
             ).fetchone()
-            configured = bool(proj and proj['owner_id'] == current_user.id)
+            configured = bool(member)
     return render_template('init.html', configured=configured, db_path=db_path or '')
 
 
@@ -81,7 +84,11 @@ def api_init_list():
         ).fetchall()
     else:
         rows = udb.execute(
-            'SELECT filename, description, owner_id FROM projects WHERE owner_id=? ORDER BY filename',
+            '''SELECT p.filename, p.description, p.owner_id
+               FROM projects p
+               JOIN project_members pm ON pm.project_id = p.id
+               WHERE pm.user_id=?
+               ORDER BY p.filename''',
             (current_user.id,)
         ).fetchall()
     files = []
@@ -117,9 +124,13 @@ def api_init_create():
         init_db(db_path, insert_defaults=data.get('insert_defaults', True))
         description = data.get('description', '').strip()
         udb = get_users_db()
-        udb.execute(
+        cur = udb.execute(
             'INSERT INTO projects (filename, description, owner_id) VALUES (?,?,?)',
             (filename, description or None, current_user.id)
+        )
+        udb.execute(
+            'INSERT INTO project_members (project_id, user_id, permission) VALUES (?,?,?)',
+            (cur.lastrowid, current_user.id, 'write')
         )
         udb.commit()
         resp = jsonify({'ok': True, 'db_path': db_path})
@@ -144,10 +155,13 @@ def api_init_open():
     # アクセス権チェック
     if not current_user.is_admin:
         udb = get_users_db()
-        proj = udb.execute(
-            'SELECT owner_id FROM projects WHERE filename=?', (filename,)
+        member = udb.execute(
+            '''SELECT 1 FROM project_members
+               JOIN projects ON projects.id = project_members.project_id
+               WHERE projects.filename=? AND project_members.user_id=?''',
+            (filename, current_user.id)
         ).fetchone()
-        if proj is None or proj['owner_id'] != current_user.id:
+        if not member:
             return jsonify({'error': 'アクセス権がありません'}), 403
     resp = jsonify({'ok': True, 'db_path': db_path})
     resp.set_cookie('active_db', filename)
@@ -157,6 +171,7 @@ def api_init_open():
 @init_bp.post('/api/init/upload')
 @login_required
 def api_init_upload():
+    import tempfile
     from werkzeug.utils import secure_filename
     f = request.files.get('db_file')
     if not f or not f.filename:
@@ -168,17 +183,112 @@ def api_init_upload():
     dest = os.path.join(DATA_DIR, filename)
     if os.path.exists(dest):
         return jsonify({'error': f'同名のファイルが既に存在します: {filename}'}), 400
-    f.save(dest)
-    description = request.form.get('description', '').strip()
-    udb = get_users_db()
-    udb.execute(
-        'INSERT INTO projects (filename, description, owner_id) VALUES (?,?,?)',
-        (filename, description or None, current_user.id)
-    )
-    udb.commit()
-    resp = jsonify({'ok': True, 'db_path': dest})
-    resp.set_cookie('active_db', filename)
-    return resp
+
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix='.db')
+    try:
+        os.close(tmp_fd)
+        f.save(tmp_path)
+
+        # アップロード DB を読み取り専用で開く
+        try:
+            src = sqlite3.connect(f'file:{tmp_path}?mode=ro', uri=True)
+            src.row_factory = sqlite3.Row
+        except Exception as e:
+            return jsonify({'error': f'DB ファイルを開けませんでした: {e}'}), 400
+
+        try:
+            # 新規 DB を作成し、データをインポート
+            description = request.form.get('description', '').strip()
+            init_db(dest, insert_defaults=True)
+            dst = sqlite3.connect(dest)
+            dst.row_factory = sqlite3.Row
+            dst.execute('PRAGMA foreign_keys = ON')
+            dst.execute('PRAGMA journal_mode=WAL')
+
+            # accounts インポート・ID マッピング構築
+            try:
+                src_accounts = src.execute(
+                    'SELECT id, name, code, element, sort_order FROM accounts'
+                ).fetchall()
+            except sqlite3.OperationalError:
+                src_accounts = []
+
+            for acc in src_accounts:
+                dst.execute(
+                    'INSERT OR IGNORE INTO accounts (name, code, element, sort_order) VALUES (?,?,?,?)',
+                    (acc['name'], acc['code'], acc['element'], acc['sort_order'])
+                )
+            dst.commit()
+
+            # old_id -> new_id のマッピング（code で照合）
+            dst_by_code = {r['code']: r['id']
+                           for r in dst.execute('SELECT id, code FROM accounts').fetchall()}
+            account_id_map = {acc['id']: dst_by_code[acc['code']]
+                              for acc in src_accounts if acc['code'] in dst_by_code}
+
+            # journal インポート
+            try:
+                src_journal = src.execute(
+                    'SELECT transaction_id, entry_date, account_id, debit_credit, amount, note'
+                    ' FROM journal'
+                ).fetchall()
+                for row in src_journal:
+                    new_id = account_id_map.get(row['account_id'])
+                    if new_id is None:
+                        continue
+                    dst.execute(
+                        'INSERT INTO journal'
+                        ' (transaction_id, entry_date, account_id, debit_credit, amount, note)'
+                        ' VALUES (?,?,?,?,?,?)',
+                        (row['transaction_id'], row['entry_date'], new_id,
+                         row['debit_credit'], row['amount'], row['note'])
+                    )
+                dst.commit()
+            except sqlite3.OperationalError:
+                pass  # journal テーブルが存在しない旧バージョン DB
+
+            # closings インポート
+            try:
+                src_closings = src.execute(
+                    'SELECT closing_date, account_id, note FROM closings'
+                ).fetchall()
+                for row in src_closings:
+                    new_id = account_id_map.get(row['account_id'])
+                    if new_id is None:
+                        continue
+                    dst.execute(
+                        'INSERT OR IGNORE INTO closings (closing_date, account_id, note)'
+                        ' VALUES (?,?,?)',
+                        (row['closing_date'], new_id, row['note'])
+                    )
+                dst.commit()
+            except sqlite3.OperationalError:
+                pass  # closings テーブルが存在しない旧バージョン DB
+
+            dst.close()
+        finally:
+            src.close()
+
+        udb = get_users_db()
+        cur = udb.execute(
+            'INSERT INTO projects (filename, description, owner_id) VALUES (?,?,?)',
+            (filename, description or None, current_user.id)
+        )
+        udb.execute(
+            'INSERT INTO project_members (project_id, user_id, permission) VALUES (?,?,?)',
+            (cur.lastrowid, current_user.id, 'write')
+        )
+        udb.commit()
+        resp = jsonify({'ok': True, 'db_path': dest})
+        resp.set_cookie('active_db', filename)
+        return resp
+    except Exception as e:
+        if os.path.exists(dest):
+            os.remove(dest)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 
 @init_bp.post('/api/init/description')
@@ -190,11 +300,17 @@ def api_init_description():
     if not filename or os.path.isabs(filename) or '/' in filename or '\\' in filename:
         return jsonify({'error': '不正なファイル名です'}), 400
     udb = get_users_db()
-    proj = udb.execute('SELECT owner_id FROM projects WHERE filename=?', (filename,)).fetchone()
-    if proj is None:
+    if not udb.execute('SELECT id FROM projects WHERE filename=?', (filename,)).fetchone():
         return jsonify({'error': 'プロジェクトが見つかりません'}), 404
-    if not current_user.is_admin and proj['owner_id'] != current_user.id:
-        return jsonify({'error': 'アクセス権がありません'}), 403
+    if not current_user.is_admin:
+        member = udb.execute(
+            '''SELECT permission FROM project_members
+               JOIN projects ON projects.id = project_members.project_id
+               WHERE projects.filename=? AND project_members.user_id=?''',
+            (filename, current_user.id)
+        ).fetchone()
+        if not member or member['permission'] != 'write':
+            return jsonify({'error': 'アクセス権がありません'}), 403
     udb.execute('UPDATE projects SET description=? WHERE filename=?', (description or None, filename))
     udb.commit()
     return jsonify({'ok': True})
@@ -210,8 +326,13 @@ def api_db_download():
     filename = os.path.basename(db_path)
     if not current_user.is_admin:
         udb = get_users_db()
-        proj = udb.execute('SELECT owner_id FROM projects WHERE filename=?', (filename,)).fetchone()
-        if proj is None or proj['owner_id'] != current_user.id:
+        member = udb.execute(
+            '''SELECT 1 FROM project_members
+               JOIN projects ON projects.id = project_members.project_id
+               WHERE projects.filename=? AND project_members.user_id=?''',
+            (filename, current_user.id)
+        ).fetchone()
+        if not member:
             return jsonify({'error': 'アクセス権がありません'}), 403
     stem = os.path.splitext(filename)[0]
     download_name = f'{stem}_{dt.today().strftime("%Y%m%d")}.db'
