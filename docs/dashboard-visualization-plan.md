@@ -1,40 +1,125 @@
 # ダッシュボード（可視化機能）設計メモ
 
-## 基本方針
+## 現在の実装状況
 
-- ユーザが自由にグラフを配置できる BI ライクなダッシュボード
-- 勘定科目がユーザごとに大きく異なるため、固定レイアウトは不適
-- グラフ設定は DB に保存（マルチユーザへの拡張性を確保）
+### ページ構成
 
----
-
-## グラフの構成要素
-
-| 要素 | 候補 |
-|------|------|
-| グラフ種 | 折れ線、棒、積み上げ棒（まず3種で十分） |
-| X 軸 | 月（ほぼ固定でよい） |
-| Y 軸（系列） | 特定科目の発生額 / 残高、または収益合計・費用合計・当期純損益などの集計値 |
-| 時間範囲 | 全期間 / 直近 N ヶ月 / 会計年度（グラフごとに設定） |
+- URL: `/dashboard`
+- ナビゲーション: 財務諸表と元帳の間に配置
+- Blueprint: `blueprints/dashboard.py`
+- テンプレート: `templates/dashboard.html`
+- JS: `static/js/dashboard.js`
 
 ---
 
-## 検討ポイント
+### 固定ウィジェット①：比例縮尺損益計算書（月次）
 
-### 1. 系列の粒度
+**概要**
 
-**シンプル案（推奨スタート地点）**
-- 1グラフ = 1科目 または 1集計値（収益合計など）
-- 実装コストが低く、まず動くものを作れる
+会計教育で用いられる比例縮尺財務諸表の PL 版。T字型の積み上げ棒グラフで、借方（費用）と貸方（収益）を月ごとに横並べし、収益規模と費用構造を視覚的に比較できる。
 
-**拡張案（後から追加可能）**
-- 複数科目をユーザが束ねて1系列にする（例: 人件費＋福利厚生費）
-- `graph_series` テーブルに複数レコードで表現できる
-- 最初から複数系列に対応したスキーマにしておくとよい
+**仕様**
 
-→ **スキーマは複数系列対応で設計し、UI は最初シンプルにする** のが安全
+- グラフ種: 積み上げ棒グラフ（Chart.js 4 の `stack` オプションで2グループ）
+- X軸: 月（YYYY-MM）
+- 期間セレクタ: 3ヶ月（デフォルト）/ 半年 / 1年 / 全期間
+- 横スクロール対応（1月あたり80px、コンテナ幅以上に動的拡張）
+- スマホ対応: `touch-action: pan-x` で縦スクロールとの競合を回避
 
-### 2. DB スキーマ案
+**データ構造**
+
+| スタック | 内容 | 色 |
+|---|---|---|
+| 借方（左） | 費用科目（sort_order順、上位科目がグラフ上段）| 青グラデーション |
+| 借方（左） | 当期純利益（利益月のみ、最下段）| 薄緑 `#DCEDC8` |
+| 貸方（右） | 収益科目（sort_order順、上位科目がグラフ上段）| オレンジグラデーション |
+| 貸方（右） | 当期純損失（損失月のみ、最下段）| 赤 `red` |
+
+- 費用: `#E3F2FD`〜`#1565C0`（8段階）
+- 収益: `#FFE0B2`〜`#EF6C00`（8段階、R版 `anal.Rmd` の配色を踏襲）
+- Y軸上限: 表示期間内の `max(収益合計, 費用合計) × 1.05`（損失月でも見切れない）
+
+**ツールチップ**
+
+- `mode: 'nearest'` + `intersect: true`（ホバーしたセグメントのみ表示）
+- 科目名・金額・収益合計比 % を表示
+- 値が0のセグメントは非表示
+
+**API**
+
+```
+GET /api/dashboard/pl_monthly?range=3m   # 3m / 6m / 12m / all
+```
+
+レスポンス:
+
+```json
+{
+  "accounts": [{"id": 1, "name": "売上", "element": "revenues"}, ...],
+  "monthly": [
+    {
+      "ym": "2025-10",
+      "total_revenues": 500000,
+      "total_expenses": 400000,
+      "net_income": 100000,
+      "by_account": {"1": 500000, "2": 300000}
+    },
+    ...
+  ]
+}
+```
+
+---
+
+### 固定ウィジェット②：純資産合計の推移
+
+**概要**
+
+純資産合計の月次累計残高を折れ線グラフで表示する時系列チャート。
+
+**仕様**
+
+- グラフ種: 折れ線グラフ（塗り付き）
+- X軸: 月（YYYY-MM）
+- 期間セレクタ: 3ヶ月 / 半年 / 1年（デフォルト）/ 全期間
+- 横スクロール対応（PLグラフと同構造）
+
+**計算ロジック**
+
+```
+純資産合計 = 純資産科目の累計残高 + 累計純損益
+```
+
+振替（closing）は純資産科目残高に加算・累計純損益から差し引かれるため、
+合計では相殺される。全期間の累計を積み上げてから表示範囲を切り出す。
+
+**API**
+
+```
+GET /api/dashboard/equity_monthly?range=12m   # 3m / 6m / 12m / all
+```
+
+レスポンス:
+
+```json
+{
+  "monthly": [
+    {"ym": "2025-01", "total_equity": 1200000},
+    ...
+  ]
+}
+```
+
+---
+
+## 今後の拡張予定
+
+### 1. ユーザー定義グラフ（BI ライクなダッシュボード）
+
+固定ウィジェット以外に、ユーザーが任意のグラフを追加・並び替えできる機能。
+科目ごとにグラフを大きく異なるため、固定レイアウトでは対応できないユーザー向け。
+
+**想定 DB スキーマ**
 
 ```sql
 CREATE TABLE dashboards (
@@ -49,60 +134,49 @@ CREATE TABLE dashboard_graphs (
     dashboard_id INTEGER NOT NULL REFERENCES dashboards(id),
     title        TEXT    NOT NULL DEFAULT '',
     chart_type   TEXT    NOT NULL CHECK(chart_type IN ('line','bar','stacked_bar')),
-    time_range   TEXT    NOT NULL DEFAULT 'all',  -- 'all' | 'last_N' | 'fiscal_year'
-    time_range_n INTEGER,                          -- time_range='last_N' のときの N（月数）
+    time_range   TEXT    NOT NULL DEFAULT 'all',
+    time_range_n INTEGER,
     sort_order   INTEGER DEFAULT 0
 );
 
 CREATE TABLE graph_series (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    graph_id         INTEGER NOT NULL REFERENCES dashboard_graphs(id),
-    label            TEXT,                          -- 系列の表示名（省略時は科目名）
-    series_type      TEXT    NOT NULL,              -- 'account' | 'total_revenues' | 'total_expenses' | 'net_income'
-    account_id       INTEGER REFERENCES accounts(id), -- series_type='account' のときのみ
-    sort_order       INTEGER DEFAULT 0
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    graph_id     INTEGER NOT NULL REFERENCES dashboard_graphs(id),
+    label        TEXT,
+    series_type  TEXT    NOT NULL,  -- 'account' | 'total_revenues' | 'total_expenses' | 'net_income'
+    account_id   INTEGER REFERENCES accounts(id),
+    sort_order   INTEGER DEFAULT 0
 );
 ```
 
-**補足**
-- `dashboards` はシングルユーザ構成でも `user_id` を持っておくとマルチユーザ化が楽
-- `graph_series` を複数レコードにしておくことで、将来の科目合算系列に対応できる
-- `time_range` の `fiscal_year` は会計期間設定が実装されたタイミングで有効化
+**UI フロー（案）**
 
-### 3. 時間範囲と会計期間の関係
+1. 「グラフを追加」ボタン → モーダルでグラフ種・期間・系列を設定
+2. グラフはカード形式で並ぶ
+3. 各グラフに編集・削除ボタン
+4. ドラッグ＆ドロップまたは sort_order 手入力で並び替え
 
-- `time_range='fiscal_year'` は、会計期間の開始日設定（未実装）と連動する
-- 当面は `all`（全期間）と `last_N`（直近 N ヶ月）だけ実装し、`fiscal_year` は後回しでよい
-
-### 4. Y 軸の値の意味（科目種別による違い）
+**Y 軸の値の意味（科目種別による違い）**
 
 | 科目種別 | グラフに使う値 |
-|----------|--------------|
-| 収益・費用 | その月の発生額（月次PL値） |
-| 資産・負債・純資産 | 月末時点の残高（累計） |
-| 集計値（収益合計など） | 同上のルールに従う |
+|---|---|
+| 収益・費用 | その月の発生額（月次 PL 値）|
+| 資産・負債・純資産 | 月末時点の累計残高 |
+| 集計値 | 同上のルールに従う |
 
-科目種別によって「発生額」か「残高」かが変わることをUIで明示する必要がある。
+### 2. 会計年度フィルタ
 
-### 5. UI 上の操作フロー（案）
+- `time_range = 'fiscal_year'` 対応
+- 会計期間の開始月設定（未実装）と連動
+- 現在は `all` / `last_N` のみ
 
-1. ダッシュボードページを開く
-2. 「グラフを追加」ボタン → モーダルでグラフ種・時間範囲・系列を設定
-3. グラフはカード形式で並ぶ（ドラッグ＆ドロップで並び替え、または sort_order 手入力）
-4. 各グラフに編集・削除ボタン
+### 3. 科目合算系列
 
-### 6. グラフ描画ライブラリ
+- 複数科目をユーザーが束ねて1系列にする（例: 人件費＋福利厚生費）
+- `graph_series` テーブルの複数レコードで表現できるよう、スキーマは複数系列対応で設計済み
 
-- **Chart.js** が現実的（すでに軽量 JS ライブラリ路線のアプリなら相性よい）
-- CDN から読み込むだけで動く、学習コスト低
+### 4. 固定ウィジェットの拡張候補
 
----
-
-## 実装順序（案）
-
-1. DBスキーマ追加（`dashboards` / `dashboard_graphs` / `graph_series`）
-2. データ取得 API（グラフ設定一覧、系列データ）
-3. グラフ描画（Chart.js）
-4. グラフ追加・編集・削除 UI
-5. 並び替え
-6. （後から）科目合算系列、会計年度フィルタ
+- 貸借対照表の比例縮尺版（BS）
+- 月次当期純損益の棒グラフ
+- 費用内訳の構成比推移（面グラフ）

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}ダッシュボード{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  <h2 class="mb-0">ダッシュボード</h2>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header d-flex align-items-center gap-2 flex-wrap">
+    <span class="fw-bold">比例縮尺損益計算書（月次）</span>
+    <div class="ms-auto btn-group btn-group-sm">
+      <button class="btn btn-primary range-btn" data-range="3m">3ヶ月</button>
+      <button class="btn btn-outline-secondary range-btn" data-range="6m">半年</button>
+      <button class="btn btn-outline-secondary range-btn" data-range="12m">1年</button>
+      <button class="btn btn-outline-secondary range-btn" data-range="all">全期間</button>
+    </div>
+  </div>
+  <div class="card-body p-2">
+    <div id="pl-chart-area"><div class="p-3 text-muted">読み込み中...</div></div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header d-flex align-items-center gap-2 flex-wrap">
+    <span class="fw-bold">純資産合計の推移</span>
+    <div class="ms-auto btn-group btn-group-sm">
+      <button class="btn btn-outline-secondary eq-range-btn" data-range="3m">3ヶ月</button>
+      <button class="btn btn-outline-secondary eq-range-btn" data-range="6m">半年</button>
+      <button class="btn btn-primary eq-range-btn" data-range="12m">1年</button>
+      <button class="btn btn-outline-secondary eq-range-btn" data-range="all">全期間</button>
+    </div>
+  </div>
+  <div class="card-body p-2">
+    <div id="eq-chart-area"><div class="p-3 text-muted">読み込み中...</div></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

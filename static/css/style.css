@@ -66,3 +66,14 @@ input.auto-filled {
   border-color: #86b7fe;
   box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
 }
+
+/* ダッシュボード - 横スクロールグラフ */
+#pl-chart-wrapper {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+#pl-chart-wrapper canvas {
+  display: block;
+  touch-action: pan-x;
+}
