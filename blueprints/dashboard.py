@@ -175,8 +175,7 @@ def api_dashboard_equity_monthly():
 def api_budget_widgets_list():
     db = get_db()
     widgets = db.execute(
-        'SELECT id, title, sort_order FROM budget_widgets WHERE user_id=? ORDER BY sort_order, id',
-        (current_user.id,)
+        'SELECT id, title, sort_order FROM budget_widgets ORDER BY sort_order, id'
     ).fetchall()
     return jsonify([dict(w) for w in widgets])
 
@@ -196,13 +195,12 @@ def api_budget_widgets_create():
 
     db = get_db()
     max_sort = db.execute(
-        'SELECT COALESCE(MAX(sort_order), 0) FROM budget_widgets WHERE user_id=?',
-        (current_user.id,)
+        'SELECT COALESCE(MAX(sort_order), 0) FROM budget_widgets'
     ).fetchone()[0]
 
     cur = db.execute(
-        'INSERT INTO budget_widgets (user_id, title, sort_order) VALUES (?,?,?)',
-        (current_user.id, title, max_sort + 1)
+        'INSERT INTO budget_widgets (title, sort_order) VALUES (?,?)',
+        (title, max_sort + 1)
     )
     widget_id = cur.lastrowid
 
@@ -223,8 +221,8 @@ def api_budget_widgets_create():
 def api_budget_widget_get(widget_id):
     db = get_db()
     widget = db.execute(
-        'SELECT id, title FROM budget_widgets WHERE id=? AND user_id=?',
-        (widget_id, current_user.id)
+        'SELECT id, title FROM budget_widgets WHERE id=?',
+        (widget_id,)
     ).fetchone()
     if not widget:
         return jsonify({'error': 'Not found'}), 404
@@ -265,8 +263,8 @@ def api_budget_widget_get(widget_id):
 def api_budget_widget_update(widget_id):
     db = get_db()
     widget = db.execute(
-        'SELECT id FROM budget_widgets WHERE id=? AND user_id=?',
-        (widget_id, current_user.id)
+        'SELECT id FROM budget_widgets WHERE id=?',
+        (widget_id,)
     ).fetchone()
     if not widget:
         return jsonify({'error': 'Not found'}), 404
@@ -318,8 +316,8 @@ def api_budget_widget_update(widget_id):
 def api_budget_widget_delete(widget_id):
     db = get_db()
     widget = db.execute(
-        'SELECT id FROM budget_widgets WHERE id=? AND user_id=?',
-        (widget_id, current_user.id)
+        'SELECT id FROM budget_widgets WHERE id=?',
+        (widget_id,)
     ).fetchone()
     if not widget:
         return jsonify({'error': 'Not found'}), 404
@@ -334,8 +332,8 @@ def api_budget_widget_delete(widget_id):
 def api_budget_widget_data(widget_id):
     db = get_db()
     widget = db.execute(
-        'SELECT id FROM budget_widgets WHERE id=? AND user_id=?',
-        (widget_id, current_user.id)
+        'SELECT id FROM budget_widgets WHERE id=?',
+        (widget_id,)
     ).fetchone()
     if not widget:
         return jsonify({'error': 'Not found'}), 404
