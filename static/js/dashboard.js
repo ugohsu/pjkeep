@@ -644,8 +644,8 @@ $(function() {
     $(document).on('click', '.eq-range-btn', function() {
         loadEquityChart($(this).data('range'));
     });
-    loadPlChart('3m');
-    loadEquityChart('12m');
+    loadPlChart('12m');
+    loadEquityChart('all');
 
     // 予算実績ウィジェット
     loadBudgetWidgets();
