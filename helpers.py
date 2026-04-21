@@ -87,6 +87,27 @@ def _apply_migrations(db):
         created_at    TEXT    DEFAULT (datetime('now','localtime'))
     )''')
     db.execute('CREATE INDEX IF NOT EXISTS idx_closings_closing_date ON closings(closing_date)')
+    # 予算実績ウィジェット（user_id は users.db の id を平 INTEGER で保持）
+    db.execute('''CREATE TABLE IF NOT EXISTS budget_widgets (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id     INTEGER NOT NULL,
+        title       TEXT    NOT NULL DEFAULT '',
+        sort_order  INTEGER DEFAULT 0
+    )''')
+    db.execute('''CREATE TABLE IF NOT EXISTS budget_widget_accounts (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        widget_id       INTEGER NOT NULL REFERENCES budget_widgets(id) ON DELETE CASCADE,
+        account_id      INTEGER NOT NULL REFERENCES accounts(id),
+        default_amount  INTEGER NOT NULL DEFAULT 0,
+        sort_order      INTEGER DEFAULT 0
+    )''')
+    db.execute('''CREATE TABLE IF NOT EXISTS budget_monthly_overrides (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        widget_account_id   INTEGER NOT NULL REFERENCES budget_widget_accounts(id) ON DELETE CASCADE,
+        year_month          TEXT    NOT NULL,
+        amount              INTEGER NOT NULL,
+        UNIQUE(widget_account_id, year_month)
+    )''')
     db.commit()
 
 

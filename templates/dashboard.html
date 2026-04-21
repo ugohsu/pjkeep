@@ -34,6 +34,58 @@
     <div id="eq-chart-area"><div class="p-3 text-muted">読み込み中...</div></div>
   </div>
 </div>
+<!-- 予算実績ウィジェット -->
+<div id="budget-widgets-container"></div>
+
+<div class="d-flex justify-content-center my-3">
+  <button class="btn btn-outline-primary" id="add-budget-widget-btn">＋ 予算実績グラフを追加</button>
+</div>
+
+<!-- 予算実績ウィジェット設定モーダル -->
+<div class="modal fade" id="budgetWidgetModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="budgetModalTitle">予算実績グラフの追加</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">タイトル</label>
+          <input type="text" class="form-control" id="bw-title" placeholder="例：食費 予算実績">
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">費用科目と月次デフォルト予算</label>
+          <div class="d-flex gap-2 mb-2">
+            <select class="form-select form-select-sm" id="bw-account-select" style="max-width:280px"></select>
+            <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" id="bw-add-account-btn">追加</button>
+          </div>
+          <div id="bw-accounts-list"></div>
+          <div id="bw-accounts-empty" class="text-muted small">科目が選択されていません</div>
+        </div>
+
+        <div>
+          <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="bw-overrides-toggle">
+            <span id="bw-overrides-caret">▶</span> 月次予算の個別設定（任意）
+          </button>
+          <div id="bw-overrides-section" class="mt-2" style="display:none">
+            <div class="text-muted small mb-1">特定の月の予算を個別に上書きします。指定しない月はデフォルト値が使われます。</div>
+            <div id="bw-overrides-list"></div>
+            <button type="button" class="btn btn-outline-secondary btn-sm mt-1" id="bw-add-override-btn">＋ 行を追加</button>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <div id="bw-error-msg" class="text-danger me-auto small"></div>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-primary" id="bw-save-btn">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
