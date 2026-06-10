@@ -199,7 +199,7 @@ def api_init_upload():
         try:
             # 新規 DB を作成し、データをインポート
             description = request.form.get('description', '').strip()
-            init_db(dest, insert_defaults=True)
+            init_db(dest, insert_defaults=False)
             dst = sqlite3.connect(dest)
             dst.row_factory = sqlite3.Row
             dst.execute('PRAGMA foreign_keys = ON')
