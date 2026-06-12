@@ -197,21 +197,13 @@ function renderEquityChart(data) {
     var months  = monthly.map(function(m) { return m.ym; });
     var values  = monthly.map(function(m) { return m.total_equity; });
 
-    var container  = document.getElementById('eq-chart-area');
-    var minWidth   = container ? container.offsetWidth - 4 : 600;
-    var canvasWidth = Math.max(minWidth, months.length * 80);
-
     $('#eq-chart-area').html(
-        '<div id="eq-chart-wrapper"><canvas id="eq-chart"></canvas></div>'
+        '<div id="eq-chart-wrapper" style="position:relative;height:240px;"><canvas id="eq-chart"></canvas></div>'
     );
-    var canvas = document.getElementById('eq-chart');
-    canvas.width        = canvasWidth;
-    canvas.height       = 240;
-    canvas.style.width  = canvasWidth + 'px';
-    canvas.style.height = '240px';
 
     if (eqChart) { eqChart.destroy(); eqChart = null; }
 
+    var canvas = document.getElementById('eq-chart');
     eqChart = new Chart(canvas, {
         type: 'line',
         data: {
@@ -229,13 +221,13 @@ function renderEquityChart(data) {
             }]
         },
         options: {
-            responsive: false,
+            responsive: true,
             maintainAspectRatio: false,
             animation: false,
             scales: {
                 x: {
                     grid: { display: false },
-                    ticks: { font: { size: 11 } }
+                    ticks: { font: { size: 11 }, autoSkip: true, maxTicksLimit: 12 }
                 },
                 y: {
                     ticks: {
@@ -644,7 +636,7 @@ $(function() {
     $(document).on('click', '.eq-range-btn', function() {
         loadEquityChart($(this).data('range'));
     });
-    loadPlChart('12m');
+    loadPlChart('3m');
     loadEquityChart('all');
 
     // 予算実績ウィジェット
