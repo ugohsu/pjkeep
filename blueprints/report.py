@@ -23,33 +23,65 @@ def report():
 @db_required
 def api_report_pl():
     ym = request.args.get('ym') or dt.today().strftime('%Y-%m')
+    year, month = int(ym[:4]), int(ym[5:7])
+
+    # 前月
+    prev_ym = f'{year - 1}-12' if month == 1 else f'{year}-{month - 1:02d}'
+    # 前々月
+    py, pm = int(prev_ym[:4]), int(prev_ym[5:7])
+    prev2_ym = f'{py - 1}-12' if pm == 1 else f'{py}-{pm - 1:02d}'
+
     db = get_db()
+
+    existing = {r[0] for r in db.execute(
+        "SELECT DISTINCT strftime('%Y-%m', entry_date) FROM journal"
+    ).fetchall()}
+    has_prev  = prev_ym  in existing
+    has_prev2 = prev2_ym in existing
+
     rows = db.execute('''
         SELECT a.id, a.name, a.element, a.sort_order,
-               SUM(CASE WHEN j.debit_credit='debit'  THEN j.amount ELSE 0 END) as debit_total,
-               SUM(CASE WHEN j.debit_credit='credit' THEN j.amount ELSE 0 END) as credit_total
+               SUM(CASE WHEN strftime('%Y-%m', j.entry_date) = ? AND j.debit_credit='debit'  THEN j.amount ELSE 0 END) AS cur_dr,
+               SUM(CASE WHEN strftime('%Y-%m', j.entry_date) = ? AND j.debit_credit='credit' THEN j.amount ELSE 0 END) AS cur_cr,
+               SUM(CASE WHEN strftime('%Y-%m', j.entry_date) = ? AND j.debit_credit='debit'  THEN j.amount ELSE 0 END) AS prv_dr,
+               SUM(CASE WHEN strftime('%Y-%m', j.entry_date) = ? AND j.debit_credit='credit' THEN j.amount ELSE 0 END) AS prv_cr,
+               SUM(CASE WHEN strftime('%Y-%m', j.entry_date) = ? AND j.debit_credit='debit'  THEN j.amount ELSE 0 END) AS p2_dr,
+               SUM(CASE WHEN strftime('%Y-%m', j.entry_date) = ? AND j.debit_credit='credit' THEN j.amount ELSE 0 END) AS p2_cr
         FROM journal j
         JOIN accounts a ON j.account_id = a.id
-        WHERE a.element IN ('revenues','expenses')
-          AND strftime('%Y-%m', j.entry_date) = ?
+        WHERE a.element IN ('revenues', 'expenses')
+          AND strftime('%Y-%m', j.entry_date) IN (?, ?, ?)
         GROUP BY a.id
         ORDER BY a.element, a.sort_order, a.name
-    ''', (ym,)).fetchall()
+    ''', (ym, ym, prev_ym, prev_ym, prev2_ym, prev2_ym, ym, prev_ym, prev2_ym)).fetchall()
 
     revenues, expenses = [], []
     for row in rows:
-        amount = (row['credit_total'] - row['debit_total']) if row['element'] == 'revenues' \
-                 else (row['debit_total'] - row['credit_total'])
-        item = {'id': row['id'], 'name': row['name'], 'amount': amount}
+        if row['element'] == 'revenues':
+            cur  = row['cur_cr'] - row['cur_dr']
+            prev = row['prv_cr'] - row['prv_dr']
+            p2   = row['p2_cr']  - row['p2_dr']
+        else:
+            cur  = row['cur_dr'] - row['cur_cr']
+            prev = row['prv_dr'] - row['prv_cr']
+            p2   = row['p2_dr']  - row['p2_cr']
+        item = {'id': row['id'], 'name': row['name'], 'current': cur, 'prev': prev, 'prev2': p2}
         (revenues if row['element'] == 'revenues' else expenses).append(item)
 
-    total_rev = sum(r['amount'] for r in revenues)
-    total_exp = sum(e['amount'] for e in expenses)
+    tr    = sum(r['current'] for r in revenues)
+    te    = sum(e['current'] for e in expenses)
+    tr_p  = sum(r['prev']    for r in revenues)
+    te_p  = sum(e['prev']    for e in expenses)
+    tr_p2 = sum(r['prev2']   for r in revenues)
+    te_p2 = sum(e['prev2']   for e in expenses)
+
     return jsonify({
-        'ym': ym,
+        'ym': ym, 'prev_ym': prev_ym, 'prev2_ym': prev2_ym,
+        'has_prev': has_prev, 'has_prev2': has_prev2,
         'revenues': revenues, 'expenses': expenses,
-        'total_revenues': total_rev, 'total_expenses': total_exp,
-        'net_income': total_rev - total_exp
+        'total_revenues': {'current': tr,      'prev': tr_p,      'prev2': tr_p2},
+        'total_expenses': {'current': te,      'prev': te_p,      'prev2': te_p2},
+        'net_income':     {'current': tr - te, 'prev': tr_p - te_p, 'prev2': tr_p2 - te_p2},
     })
 
 

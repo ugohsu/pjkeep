@@ -43,34 +43,60 @@ function loadReports(ym) {
 }
 
 function renderPL(data) {
+  const hasPrev2 = data.has_prev2;
+  const hasPrev  = data.has_prev;
+  const cols = 1 + (hasPrev2 ? 1 : 0) + (hasPrev ? 1 : 0) + 1;
+
+  function amtCell(amount, extra) {
+    return `<td class="text-end ${extra || ''}">¥${fmt(amount)}</td>`;
+  }
+
   let html = '<table class="table table-sm mb-0">';
 
+  // ヘッダー行
+  html += '<thead><tr><th>科目</th>';
+  if (hasPrev2) html += `<th class="text-end text-muted">${data.prev2_ym}<br><small class="fw-normal">前々月</small></th>`;
+  if (hasPrev)  html += `<th class="text-end text-muted">${data.prev_ym}<br><small class="fw-normal">前月</small></th>`;
+  html += `<th class="text-end">${data.ym}<br><small class="fw-normal">当月</small></th></tr></thead>`;
+
   // 収益
-  html += '<tbody><tr class="table-light"><th colspan="2">収益</th></tr>';
+  html += `<tbody><tr class="table-light"><th colspan="${cols}">収益</th></tr>`;
   if (data.revenues.length === 0) {
-    html += '<tr><td colspan="2" class="text-muted ps-3">（なし）</td></tr>';
+    html += `<tr><td colspan="${cols}" class="text-muted ps-3">（なし）</td></tr>`;
   }
   data.revenues.forEach(function(r) {
-    html += `<tr><td class="ps-3">${r.name}</td><td class="text-end">¥${fmt(r.amount)}</td></tr>`;
+    html += `<tr><td class="ps-3">${r.name}</td>`;
+    if (hasPrev2) html += amtCell(r.prev2);
+    if (hasPrev)  html += amtCell(r.prev);
+    html += amtCell(r.current) + '</tr>';
   });
-  html += `<tr class="fw-bold"><td>収益合計</td><td class="text-end">¥${fmt(data.total_revenues)}</td></tr>`;
+  html += `<tr class="fw-bold"><td>収益合計</td>`;
+  if (hasPrev2) html += amtCell(data.total_revenues.prev2);
+  if (hasPrev)  html += amtCell(data.total_revenues.prev);
+  html += amtCell(data.total_revenues.current) + '</tr>';
 
   // 費用
-  html += '<tr class="table-light"><th colspan="2">費用</th></tr>';
+  html += `<tr class="table-light"><th colspan="${cols}">費用</th></tr>`;
   if (data.expenses.length === 0) {
-    html += '<tr><td colspan="2" class="text-muted ps-3">（なし）</td></tr>';
+    html += `<tr><td colspan="${cols}" class="text-muted ps-3">（なし）</td></tr>`;
   }
   data.expenses.forEach(function(e) {
-    html += `<tr><td class="ps-3">${e.name}</td><td class="text-end">¥${fmt(e.amount)}</td></tr>`;
+    html += `<tr><td class="ps-3">${e.name}</td>`;
+    if (hasPrev2) html += amtCell(e.prev2);
+    if (hasPrev)  html += amtCell(e.prev);
+    html += amtCell(e.current) + '</tr>';
   });
-  html += `<tr class="fw-bold"><td>費用合計</td><td class="text-end">¥${fmt(data.total_expenses)}</td></tr>`;
+  html += `<tr class="fw-bold"><td>費用合計</td>`;
+  if (hasPrev2) html += amtCell(data.total_expenses.prev2);
+  if (hasPrev)  html += amtCell(data.total_expenses.prev);
+  html += amtCell(data.total_expenses.current) + '</tr>';
 
   // 純利益
   const ni = data.net_income;
-  html += `<tr class="table-primary fw-bold">
-    <td>当期純利益</td>
-    <td class="text-end ${sign(ni)}">¥${fmt(ni)}</td>
-  </tr>`;
+  html += `<tr class="table-primary fw-bold"><td>当期純利益</td>`;
+  if (hasPrev2) html += amtCell(ni.prev2, sign(ni.prev2));
+  if (hasPrev)  html += amtCell(ni.prev,  sign(ni.prev));
+  html += amtCell(ni.current, sign(ni.current)) + '</tr>';
 
   html += '</tbody></table>';
   $('#pl-content').html(html);
