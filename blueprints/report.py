@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import date as dt
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required
-from helpers import get_db, db_required, tsv_response, get_closing_amounts
+from helpers import get_db, db_required, write_required, tsv_response, get_closing_amounts
 
 report_bp = Blueprint('report', __name__)
 
@@ -83,6 +83,34 @@ def api_report_pl():
         'total_expenses': {'current': te,      'prev': te_p,      'prev2': te_p2},
         'net_income':     {'current': tr - te, 'prev': tr_p - te_p, 'prev2': tr_p2 - te_p2},
     })
+
+
+@report_bp.get('/api/settings')
+@login_required
+@db_required
+def api_settings_get():
+    db = get_db()
+    row = db.execute("SELECT value FROM settings WHERE key='income_base'").fetchone()
+    val = int(row['value']) if row and row['value'] is not None else None
+    return jsonify({'income_base': val})
+
+
+@report_bp.put('/api/settings')
+@login_required
+@db_required
+@write_required
+def api_settings_put():
+    db = get_db()
+    data = request.get_json() or {}
+    if 'income_base' in data:
+        val = data['income_base']
+        if val is None:
+            db.execute("DELETE FROM settings WHERE key='income_base'")
+        else:
+            db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('income_base', ?)",
+                       (str(int(val)),))
+        db.commit()
+    return jsonify({'ok': True})
 
 
 @report_bp.get('/api/report/bs')

@@ -1,11 +1,49 @@
 // report.js - 財務諸表
 
+let cachedPlData = null;
+let incomeBase = null;
+
 function fmt(n) {
   return Number(n).toLocaleString('ja-JP');
 }
 
 function sign(n) {
   return n < 0 ? 'text-danger' : '';
+}
+
+function loadIncomeBase() {
+  return $.getJSON('/api/settings').then(function(s) {
+    incomeBase = s.income_base ?? null;
+    $('#income-base-input').val(incomeBase !== null ? incomeBase : '');
+  });
+}
+
+function saveIncomeBase(val) {
+  $.ajax({
+    url: '/api/settings',
+    method: 'PUT',
+    contentType: 'application/json',
+    data: JSON.stringify({ income_base: val }),
+  });
+}
+
+// 分母を返す。当月のみ日数按分、それ以外はbase値そのまま。
+function computeDenominator(ym, base) {
+  if (!base) return null;
+  const today = new Date();
+  const todayYm = today.toISOString().slice(0, 7);
+  if (ym === todayYm) {
+    const year  = parseInt(ym.slice(0, 4));
+    const month = parseInt(ym.slice(5, 7));
+    const daysInMonth = new Date(year, month, 0).getDate();
+    return base * today.getDate() / daysInMonth;
+  }
+  return base;
+}
+
+function pctStr(amount, denom) {
+  if (!denom || denom <= 0) return null;
+  return '(' + (amount / denom * 100).toFixed(2) + '%)';
 }
 
 function loadMonths() {
@@ -43,12 +81,19 @@ function loadReports(ym) {
 }
 
 function renderPL(data) {
+  cachedPlData = data;
+
   const hasPrev2 = data.has_prev2;
   const hasPrev  = data.has_prev;
   const cols = 1 + (hasPrev2 ? 1 : 0) + (hasPrev ? 1 : 0) + 1;
 
-  function amtCell(amount, extra) {
-    return `<td class="text-end ${extra || ''}">¥${fmt(amount)}</td>`;
+  const denomCur  = computeDenominator(data.ym, incomeBase);
+  const denomPrev = incomeBase || null;
+  const denomP2   = incomeBase || null;
+
+  function amtCell(amount, extra, pct) {
+    const pctHtml = pct ? `<br><small class="text-muted" style="font-size:.8em">${pct}</small>` : '';
+    return `<td class="text-end ${extra || ''}">¥${fmt(amount)}${pctHtml}</td>`;
   }
 
   let html = '<table class="table table-sm mb-0">';
@@ -66,14 +111,14 @@ function renderPL(data) {
   }
   data.revenues.forEach(function(r) {
     html += `<tr><td class="ps-3">${r.name}</td>`;
-    if (hasPrev2) html += amtCell(r.prev2);
-    if (hasPrev)  html += amtCell(r.prev);
-    html += amtCell(r.current) + '</tr>';
+    if (hasPrev2) html += amtCell(r.prev2, '', pctStr(r.prev2, denomP2));
+    if (hasPrev)  html += amtCell(r.prev,  '', pctStr(r.prev,  denomPrev));
+    html += amtCell(r.current, '', pctStr(r.current, denomCur)) + '</tr>';
   });
   html += `<tr class="fw-bold"><td>収益合計</td>`;
-  if (hasPrev2) html += amtCell(data.total_revenues.prev2);
-  if (hasPrev)  html += amtCell(data.total_revenues.prev);
-  html += amtCell(data.total_revenues.current) + '</tr>';
+  if (hasPrev2) html += amtCell(data.total_revenues.prev2, '', pctStr(data.total_revenues.prev2, denomP2));
+  if (hasPrev)  html += amtCell(data.total_revenues.prev,  '', pctStr(data.total_revenues.prev,  denomPrev));
+  html += amtCell(data.total_revenues.current, '', pctStr(data.total_revenues.current, denomCur)) + '</tr>';
 
   // 費用
   html += `<tr class="table-light"><th colspan="${cols}">費用</th></tr>`;
@@ -82,21 +127,21 @@ function renderPL(data) {
   }
   data.expenses.forEach(function(e) {
     html += `<tr><td class="ps-3">${e.name}</td>`;
-    if (hasPrev2) html += amtCell(e.prev2);
-    if (hasPrev)  html += amtCell(e.prev);
-    html += amtCell(e.current) + '</tr>';
+    if (hasPrev2) html += amtCell(e.prev2, '', pctStr(e.prev2, denomP2));
+    if (hasPrev)  html += amtCell(e.prev,  '', pctStr(e.prev,  denomPrev));
+    html += amtCell(e.current, '', pctStr(e.current, denomCur)) + '</tr>';
   });
   html += `<tr class="fw-bold"><td>費用合計</td>`;
-  if (hasPrev2) html += amtCell(data.total_expenses.prev2);
-  if (hasPrev)  html += amtCell(data.total_expenses.prev);
-  html += amtCell(data.total_expenses.current) + '</tr>';
+  if (hasPrev2) html += amtCell(data.total_expenses.prev2, '', pctStr(data.total_expenses.prev2, denomP2));
+  if (hasPrev)  html += amtCell(data.total_expenses.prev,  '', pctStr(data.total_expenses.prev,  denomPrev));
+  html += amtCell(data.total_expenses.current, '', pctStr(data.total_expenses.current, denomCur)) + '</tr>';
 
   // 純利益
   const ni = data.net_income;
   html += `<tr class="table-primary fw-bold"><td>当期純利益</td>`;
-  if (hasPrev2) html += amtCell(ni.prev2, sign(ni.prev2));
-  if (hasPrev)  html += amtCell(ni.prev,  sign(ni.prev));
-  html += amtCell(ni.current, sign(ni.current)) + '</tr>';
+  if (hasPrev2) html += amtCell(ni.prev2, sign(ni.prev2), pctStr(ni.prev2, denomP2));
+  if (hasPrev)  html += amtCell(ni.prev,  sign(ni.prev),  pctStr(ni.prev,  denomPrev));
+  html += amtCell(ni.current, sign(ni.current), pctStr(ni.current, denomCur)) + '</tr>';
 
   html += '</tbody></table>';
   $('#pl-content').html(html);
@@ -314,7 +359,16 @@ $(document).on('click', '.btn-closing-del', function() {
   });
 });
 
+$('#income-base-input').on('change', function() {
+  const val = $(this).val().trim();
+  const parsed = val !== '' ? parseInt(val, 10) : null;
+  incomeBase = parsed;
+  saveIncomeBase(parsed);
+  if (cachedPlData) renderPL(cachedPlData);
+});
+
 $(function() {
+  loadIncomeBase();
   loadMonths().then(function() {
     const ym = $('#ym-select').val();
     if (ym) loadReports(ym);

@@ -106,6 +106,10 @@ def _apply_migrations(db):
         amount              INTEGER NOT NULL,
         UNIQUE(widget_account_id, year_month)
     )''')
+    db.execute('''CREATE TABLE IF NOT EXISTS settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT
+    )''')
     db.commit()
 
 

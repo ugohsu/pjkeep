@@ -4,6 +4,13 @@
 <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
   <h2 class="mb-0">財務諸表</h2>
   <select id="ym-select" class="form-select form-select-sm" style="width:auto"></select>
+  <div class="d-flex align-items-center gap-1">
+    <label class="form-label mb-0 small text-muted text-nowrap" for="income-base-input">収入基準</label>
+    <div class="input-group input-group-sm" style="width:160px">
+      <span class="input-group-text">¥</span>
+      <input type="number" class="form-control" id="income-base-input" placeholder="未設定" min="0" step="1">
+    </div>
+  </div>
   <div class="ms-auto btn-group">
     <button class="btn btn-sm btn-outline-secondary" id="btn-export">TSV エクスポート（指定月）</button>
     <button class="btn btn-sm btn-outline-secondary dropdown-toggle dropdown-toggle-split"
