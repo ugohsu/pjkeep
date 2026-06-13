@@ -24,9 +24,10 @@ def api_dashboard_pl_monthly():
     db = get_db()
 
     # 期間フィルタの起点月を計算
+    today = dt.today()
+    current_ym = f'{today.year:04d}-{today.month:02d}'
     if range_param in ('3m', '6m', '12m'):
         n = {'3m': 3, '6m': 6, '12m': 12}[range_param]
-        today = dt.today()
         year, month = today.year, today.month
         month -= (n - 1)
         while month <= 0:
@@ -51,8 +52,9 @@ def api_dashboard_pl_monthly():
             FROM journal j JOIN accounts a ON j.account_id = a.id
             WHERE a.element IN ('revenues','expenses')
               AND strftime('%Y-%m', j.entry_date) >= ?
+              AND strftime('%Y-%m', j.entry_date) <= ?
             GROUP BY ym, j.account_id ORDER BY ym
-        ''', (start_ym,)).fetchall()
+        ''', (start_ym, current_ym)).fetchall()
     else:
         pl_rows = db.execute('''
             SELECT strftime('%Y-%m', j.entry_date) as ym, j.account_id, a.element,
@@ -60,8 +62,9 @@ def api_dashboard_pl_monthly():
                    SUM(CASE WHEN j.debit_credit='credit' THEN j.amount ELSE 0 END) as ct
             FROM journal j JOIN accounts a ON j.account_id = a.id
             WHERE a.element IN ('revenues','expenses')
+              AND strftime('%Y-%m', j.entry_date) <= ?
             GROUP BY ym, j.account_id ORDER BY ym
-        ''').fetchall()
+        ''', (current_ym,)).fetchall()
 
     monthly_pl = defaultdict(dict)
     months_set = set()
@@ -98,9 +101,10 @@ def api_dashboard_equity_monthly():
     range_param = request.args.get('range', '12m')
     db = get_db()
 
+    today = dt.today()
+    current_ym = f'{today.year:04d}-{today.month:02d}'
     if range_param in ('3m', '6m', '12m'):
         n = {'3m': 3, '6m': 6, '12m': 12}[range_param]
-        today = dt.today()
         year, month = today.year, today.month
         month -= (n - 1)
         while month <= 0:
@@ -110,9 +114,11 @@ def api_dashboard_equity_monthly():
     else:
         start_ym = None
 
-    # 仕訳が存在する全月を昇順で取得
+    # 仕訳が存在する全月を昇順で取得（当月以降は除外）
     all_months = [r['ym'] for r in db.execute(
-        "SELECT DISTINCT strftime('%Y-%m', entry_date) as ym FROM journal ORDER BY ym"
+        "SELECT DISTINCT strftime('%Y-%m', entry_date) as ym FROM journal"
+        " WHERE strftime('%Y-%m', entry_date) <= ? ORDER BY ym",
+        (current_ym,)
     ).fetchall()]
 
     if not all_months:
